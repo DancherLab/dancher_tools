@@ -87,7 +87,7 @@ class base(nn.Module):
                     best_val_loss = val_loss
                     patience_counter = 0
                     # 保存最佳模型
-                    self.save(epoch, model_dir=model_save_dir, save_as='best')
+                    self.save(epoch, model_dir=model_save_dir, mode='best')
                     print("Best model saved.")
                 else:
                     patience_counter += 1
@@ -98,7 +98,7 @@ class base(nn.Module):
                 val_loss = None  # 如果没有验证集，不使用早停
 
             # 每个 epoch 末保存最新模型
-            self.save(epoch, model_dir=model_save_dir, save_as='latest')
+            self.save(epoch=epoch, model_dir=model_save_dir, mode='latest')
 
         print("Training complete.")
 
