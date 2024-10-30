@@ -18,7 +18,6 @@ class base(nn.Module):
         self.metrics = []
 
 
-    # 在 base.py 中
     def compile(self, optimizer, criterion, metrics=None, loss_weights=None):
         """
         设置模型的优化器、损失函数和评价指标。
