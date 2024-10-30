@@ -2,100 +2,125 @@ import argparse
 import yaml
 import os
 
-def load_config(config_file):
-    """
-    读取 YAML 配置文件，如果文件不存在或无法正确读取，抛出异常。
-    """
+class Config:
+    """简单的配置类，支持通过属性访问配置参数"""
+    def __init__(self, config_dict):
+        for key, value in config_dict.items():
+            setattr(self, key, value)
+
+def load_yaml_config(config_file):
+    """读取 YAML 配置文件"""
     if not os.path.exists(config_file):
         raise FileNotFoundError(f"Config file '{config_file}' does not exist.")
     
-    try:
-        with open(config_file, 'r', encoding='utf-8') as f:
-            config = yaml.safe_load(f)
-            if config is None:
-                raise ValueError(f"Config file '{config_file}' is empty or contains invalid YAML syntax.")
-    except yaml.YAMLError as exc:
-        raise ValueError(f"Error reading YAML config file '{config_file}': {exc}")
-    
+    with open(config_file, 'r', encoding='utf-8') as f:
+        config = yaml.safe_load(f) or {}
     return config
 
-def get_args():
-    """
-    解析命令行参数和配置文件参数，并设置默认值。
-    """
-    parser = argparse.ArgumentParser(description='Training Configuration')
+def validate_and_set_defaults(config):
+    """验证配置参数的类型，并设置默认值。若缺少必需参数则抛出错误。"""
+    validated_config = {}
+    errors = []
 
-    # 配置文件路径
-    parser.add_argument('--config', type=str, default='configs/config.yaml', help='Path to the config file')
+    # 必需参数列表（没有默认值的参数）
+    required_params = {
+        'model_name': str,
+        'img_size': int,
+        'num_classes': int,
+        'dataset_path': str,
+        'train_paths': list,
+        'test_paths': list,
+        'model_save_dir': str
+    }
 
-    # 模型相关参数
-    parser.add_argument('--model_name', type=str, help='Name of the model to use')
-    parser.add_argument('--img_size', type=int, default=224, help='Input image size')
-    parser.add_argument('--vit_patches_size', type=int, default=16, help='ViT patches size')
-    parser.add_argument('--num_classes', type=int, default=1, help='Number of classes')
-    parser.add_argument('--n_skip', type=int, default=3, help='Number of skip connections')
+    # 默认参数列表（有默认值的参数）
+    default_params = {
+        'vit_patches_size': 16,
+        'n_skip': 3,
+        'batch_size': 16,
+        'num_workers': 4,
+        'color_map': {},
+        'augmentations': False,
+        'num_epochs': 100,
+        'learning_rate': 0.001,
+        'patience': 10,
+        'delta': 0.01,
+        'weight': None,
+        'load_mode': 0,
+        'loss': 'bce',
+        'loss_weights': None
+    }
 
-    # 数据加载相关参数
-    parser.add_argument('--dataset_path', type=str, help='Base path for datasets')
-    parser.add_argument('--train_paths', type=str, nargs='+', help='List of training datasets')
-    parser.add_argument('--test_paths', type=str, nargs='+', help='List of test datasets')
-    parser.add_argument('--batch_size', type=int, default=16, help='Batch size')
-    parser.add_argument('--num_workers', type=int, default=4, help='Number of data loader workers')
+    # 检查必需参数是否存在，且类型匹配
+    for param, param_type in required_params.items():
+        if param not in config and param != 'train_paths' and param != 'test_paths' and param != 'dataset_path':
+            errors.append(f"Missing required parameter '{param}' of type {param_type.__name__}.")
+        elif param in config and not isinstance(config[param], param_type):
+            actual_type = type(config[param]).__name__
+            errors.append(f"Parameter '{param}' should be of type {param_type.__name__}, but got {actual_type}.")
 
-    # 数据增强参数
-    parser.add_argument('--augmentations', action='store_true', default=False, help='Whether to use data augmentations')
+    # 特殊处理 datasets 部分
+    if 'datasets' in config:
+        datasets = config['datasets']
+        
+        # 检查 datasets 中的路径信息
+        if 'path' in datasets:
+            validated_config['dataset_path'] = datasets['path']
+        else:
+            errors.append("Missing required parameter 'path' in 'datasets'.")
 
-    # 是否导出输出
-    parser.add_argument('--export', action='store_true', default=False, help='Whether to export outputs')
-    parser.add_argument('--conf', action='store_true', default=False, help='Whether to export outputs')
+        # 检查 train 和 test 列表
+        if 'train' in datasets:
+            validated_config['train_paths'] = [os.path.join(validated_config['dataset_path'], path) for path in datasets['train']]
+        else:
+            errors.append("Missing required parameter 'train' in 'datasets'.")
 
-    # 训练相关参数
-    parser.add_argument('--num_epochs', type=int, default=100, help='Number of training epochs')
-    parser.add_argument('--learning_rate', type=float, default=0.001, help='Learning rate')
-    parser.add_argument('--model_save_dir', type=str, default='./checkpoints', help='Directory to save models')
+        if 'test' in datasets:
+            validated_config['test_paths'] = [os.path.join(validated_config['dataset_path'], path) for path in datasets['test']]
+        else:
+            errors.append("Missing required parameter 'test' in 'datasets'.")
+    else:
+        errors.append("Missing required 'datasets' configuration.")
 
-    # EarlyStopping 参数
-    parser.add_argument('--patience', type=int, default=10, help='EarlyStopping patience')
-    parser.add_argument('--delta', type=float, default=0.01, help='EarlyStopping delta')
+    # 如果有错误，抛出异常并列出所有错误
+    if errors:
+        error_message = "Configuration validation errors:\n" + "\n".join(errors)
+        raise ValueError(error_message)
 
-    # 预训练模型路径和加载模式
-    parser.add_argument('--weight', type=str, help='Path to the pretrained model weights')
-    parser.add_argument('--load_mode', type=int, choices=[0, 1, 2, 3],
-                        help='Model loading mode: '
-                             '0 - Load the latest checkpoint based on epoch number, '
-                             '1 - Load the default checkpoint (model.pth), '
-                             '2 - Load the latest modified checkpoint based on file modification time, '
-                             '3 - Load the best checkpoint (model_best.pth)')
-
-    # 损失函数选择
-    parser.add_argument('--loss', type=str, default='bce', help='Choose the loss function to use: mcc_loss or others')
-    parser.add_argument('--loss_weights', type=str, default=None, help='Comma-separated list of loss function weights (e.g., "0.7,0.3" for combined losses)')
-
-    # 解析命令行参数
-    args, _ = parser.parse_known_args()
-
-    # 加载配置文件
-    if args.config and os.path.exists(args.config):
-        config = load_config(args.config)
-        for key, value in config.items():
-            if hasattr(args, key):
-                setattr(args, key, value)
-            if not hasattr(args, key):
-                setattr(args, key, value)
-
-        # 处理 datasets 信息，拼接完整路径
-        if 'datasets' in config:
-            datasets = config['datasets']
-            args.dataset_path = datasets['path']
-            args.train_paths = [os.path.join(args.dataset_path, train_path) for train_path in datasets['train']]
-            args.test_paths = [os.path.join(args.dataset_path, test_path) for test_path in datasets['test']]
-
-    # 检查如果没有的必需参数，报错
-    required_params = ['model_name', 'img_size', 'num_classes', 'train_paths', 'test_paths', 'num_epochs', 'learning_rate', 'model_save_dir']
+    # 对其余必需参数赋值
     for param in required_params:
-        if not hasattr(args, param) or getattr(args, param) is None:
-            raise ValueError(f"Missing required parameter: {param}")
+        if param in config and param not in validated_config:  # 确保没有被 'datasets' 覆盖
+            validated_config[param] = config[param]
 
-    print(f"Loaded config: {args}")
+    # 设置默认值的参数
+    for param, default_value in default_params.items():
+        validated_config[param] = config.get(param, default_value)
 
-    return args
+    # 特殊参数类型检查
+    if not isinstance(validated_config['train_paths'], list):
+        raise TypeError("train_paths should be a list.")
+    if not isinstance(validated_config['test_paths'], list):
+        raise TypeError("test_paths should be a list.")
+    if not isinstance(validated_config['color_map'], dict):
+        raise TypeError("color_map should be a dictionary.")
+
+    # 创建模型保存路径
+    if not os.path.exists(validated_config['model_save_dir']):
+        os.makedirs(validated_config['model_save_dir'])
+
+    return validated_config
+
+def get_config():
+    """解析唯一命令行参数 --config，并加载 YAML 配置文件"""
+    parser = argparse.ArgumentParser(description='Load Configuration File')
+    parser.add_argument('--config', type=str, required=True, help='Path to the config file')
+    args = parser.parse_args()
+
+    # 加载 YAML 配置
+    config = load_yaml_config(args.config)
+    # 验证和设置默认值
+    validated_config = validate_and_set_defaults(config)
+    print(f"Loaded and validated config from {args.config}: {validated_config}")
+    
+    # 返回 Config 对象而不是字典
+    return Config(validated_config)

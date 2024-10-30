@@ -1,5 +1,5 @@
 import torch
-from .LSTM import LSTM  # 假设LSTM模型文件名为LSTMModel
+
 
 def get_model(args, device):
     """
@@ -13,6 +13,7 @@ def get_model(args, device):
         指定的模型实例。
     """
     if args.model_name.lower() == 'lstm':
+        from Regression.LSTM import LSTM
         model = LSTM().to(device)
     else:
         raise ValueError(f"Unsupported model name: {args.model_name}. Currently, only 'lstm' is supported.")

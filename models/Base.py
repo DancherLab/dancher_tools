@@ -4,183 +4,231 @@ import os
 import glob
 from datetime import datetime
 import re
+from tqdm import tqdm
+from utils.losses import CombinedLoss 
 
-class BaseModel(nn.Module):
+class base(nn.Module):
     def __init__(self):
-        super(BaseModel, self).__init__()
+        super(base, self).__init__()
         self.model_name = 'model'  # Default model name
         self.last_epoch = 0  # Initialize last_epoch
         self.best_val = 0
+        self.optimizer = None
+        self.criterion = None
+        self.metrics = []
 
-    def load(self, model_dir='./checkpoints', mode=0, specified_path=None, optimizer=None):
+
+    def compile(self, optimizer, criterion, metrics=None, loss_weights=None):
         """
-        根据 mode 加载预训练模型权重，支持四种模式：
-        mode 0: 加载最新 epoch 的模型。
-        mode 1: 加载固定名称的模型文件。
-        mode 2: 加载最近修改的模型文件。
-        mode 3: 加载最佳模型文件（根据验证集性能保存的模型）。
+        设置模型的优化器、损失函数和评价指标。
+        :param optimizer: 优化器实例
+        :param criterion: 单一损失函数或损失函数列表
+        :param metrics: 指标函数列表
+        :param loss_weights: 损失函数对应的权重列表（如果 criterion 是列表）
         """
-        load_path = self._get_load_path(specified_path, self.model_name, model_dir, mode)
+        self.optimizer = optimizer
+
+        # 检查 criterion 是否为列表，如果是则创建 CombinedLoss
+        if isinstance(criterion, list):
+            losses = [loss() if isinstance(loss, type) else loss for loss in criterion]
+            self.criterion = CombinedLoss(losses=losses, weights=loss_weights)
+        elif isinstance(criterion, nn.Module):
+            self.criterion = criterion
+        else:
+            raise ValueError("criterion must be a nn.Module instance or a list of loss functions.")
+
+        self.metrics = metrics if metrics is not None else []
         
-        if load_path and os.path.exists(load_path):
-            print(f"Loading model from {load_path}")
-            checkpoint = torch.load(load_path, weights_only=True)
+    def fit(
+        self,
+        train_loader,
+        val_loader=None,
+        num_epochs=10,
+        patience=5,
+        delta=0.01,
+        model_save_dir='./checkpoints'
+    ):
+        """
+        训练模型并在验证集上评估，支持早停。
+        :param train_loader: 训练数据加载器
+        :param val_loader: 验证数据加载器（可选）
+        :param num_epochs: 训练周期数
+        :param patience: 早停的耐心值（验证损失未改善的最大周期数）
+        :param delta: 早停的最小损失改善量
+        :param model_save_dir: 模型保存目录
+        """
+        best_val_loss = float('inf')
+        patience_counter = 0
+        device = next(self.parameters()).device
 
-            # 加载模型参数
-            if 'model_state_dict' in checkpoint:
-                self.load_state_dict(checkpoint['model_state_dict'])
-                print(f"Model successfully loaded from {load_path}, epoch: {checkpoint.get('epoch', 'unknown')}.")
-            else:
-                print(f"Error: No 'model_state_dict' found in checkpoint {load_path}.")
+        for epoch in range(1, num_epochs + 1):
+            # Training phase
+            self.train()
+            running_loss = 0.0
+            for features, targets in tqdm(train_loader, desc=f"Epoch {epoch}/{num_epochs} - Training"):
+                features, targets = features.to(device), targets.to(device)
+                self.optimizer.zero_grad()
+                outputs = self(features)
+                loss = self.criterion(outputs, targets)
+                loss.backward()
+                self.optimizer.step()
+                running_loss += loss.item()
 
-            # 加载优化器状态（如果提供）
-            if optimizer and 'optimizer_state_dict' in checkpoint:
-                try:
-                    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-                    print("Optimizer state loaded.")
-                except Exception as e:
-                    print(f"Failed to load optimizer state: {e}")
+            avg_train_loss = running_loss / len(train_loader)
+            print(f"Epoch {epoch}: Training Loss: {avg_train_loss:.4f}")
 
-            # 更新训练周期数
-            self.last_epoch = checkpoint.get('epoch', 0)
-            self.best_val = checkpoint.get('best_val', None)  # 加载最佳验证集性能
-            print(f"Last epoch loaded: {self.last_epoch}, Best validation value: {self.best_val}")
-        else:
-            print(f"No model found at {load_path}, starting from scratch.")
-            self.last_epoch = 0
-            self.best_val = None
+            # Validation phase (optional)
+            if val_loader is not None:
+                val_loss, val_metrics = self.evaluate(val_loader)
+                print(f"Epoch {epoch}: Validation Loss: {val_loss:.4f}, Metrics: {val_metrics}")
 
-
-    def transfer(self, path, strict=False):
-        if os.path.exists(path):
-            checkpoint = torch.load(path)
-            checkpoint_state_dict = checkpoint['model_state_dict']
-            model_state_dict = self.state_dict()
-
-            # Prepare a dictionary to hold parameters that are available in both checkpoint and current model
-            new_state_dict = {}
-
-            # Parameters not found in the current model but exist in the checkpoint
-            missing_parameters = []
-            extra_parameters = []
-
-            for name, parameter in model_state_dict.items():
-                if name in checkpoint_state_dict:
-                    if checkpoint_state_dict[name].size() == parameter.size():
-                        new_state_dict[name] = checkpoint_state_dict[name]
-                    else:
-                        extra_parameters.append(name)
+                # Check if validation loss improved
+                if val_loss < best_val_loss - delta:
+                    best_val_loss = val_loss
+                    patience_counter = 0
+                    # 保存最佳模型
+                    self.save(epoch, model_dir=model_save_dir, save_as='best')
+                    print("Best model saved.")
                 else:
-                    missing_parameters.append(name)
+                    patience_counter += 1
+                    if patience_counter >= patience:
+                        print("Early stopping triggered.")
+                        break
+            else:
+                val_loss = None  # 如果没有验证集，不使用早停
 
-            # Loading the matched parameters
-            self.load_state_dict(new_state_dict, strict=False)
-            print(f"Model parameters transferred from {path}. Successfully loaded parameters: {len(new_state_dict)}")
+            # 每个 epoch 末保存最新模型
+            self.save(epoch, model_dir=model_save_dir, save_as='latest')
 
-            if missing_parameters:
-                print(f"Parameters not found in the checkpoint and using default: {missing_parameters}")
-            if extra_parameters:
-                print(f"Parameters in checkpoint but not used due to size mismatch: {extra_parameters}")
+        print("Training complete.")
 
-        else:
-            print(f"No checkpoint found at {path} to transfer parameters from.")
 
-    def save(self, epoch, optimizer=None, model_dir='./checkpoints', mode=0, specified_path=None):
+    def evaluate(self, data_loader):
         """
-        根据不同的 mode 保存模型：
-        mode 0: 保存为带有 epoch 编号的模型。
-        mode 1: 保存为固定名称的模型文件。
-        mode 2: 保存为带有时间戳的模型文件。
-        mode 3: 保存为最佳模型（根据验证集性能）。
-        如果提供了 specified_path，则按该路径保存模型。
+        在指定的数据集上评估模型的损失和评价指标
+        :param data_loader: 数据加载器
+        :return: 平均损失和各评价指标的字典
         """
-        # 如果指定了路径，直接使用 specified_path，否则根据模式生成路径
-        if specified_path:
-            save_path = specified_path
-        else:
-            save_path = self._determine_save_path(model_dir, self.model_name, epoch, mode)
+        self.eval()
+        total_loss = 0.0
+        total_metrics = {metric.__name__: 0.0 for metric in self.metrics}
+        device = next(self.parameters()).device
 
-        # 确保保存路径的目录存在
-        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        with torch.no_grad():
+            for features, targets in data_loader:
+                features, targets = features.to(device), targets.to(device)
+                outputs = self(features)
+                loss = self.criterion(outputs, targets)
+                total_loss += loss.item()
+                
+                # 计算各项指标
+                for metric in self.metrics:
+                    total_metrics[metric.__name__] += metric(outputs, targets).item()
+
+        avg_loss = total_loss / len(data_loader)
+        avg_metrics = {name: value / len(data_loader) for name, value in total_metrics.items()}
+
+        print(f"Evaluation Loss: {avg_loss:.4f}, Metrics: {avg_metrics}")
+        return avg_loss, avg_metrics
+    
+    def save(self, model_dir='./checkpoints', mode='latest'):
+        """
+        保存模型至指定目录。
+        :param model_dir: 保存的文件夹路径
+        :param mode: 保存模式，'latest'、'best' 或 'epoch'。
+        """
+        if not os.path.exists(model_dir):
+            os.makedirs(model_dir)
+
+        # 根据 mode 确定文件名
+        if mode == 'latest':
+            save_path = os.path.join(model_dir, f"{self.model_name}_latest.pth")
+        elif mode == 'best':
+            save_path = os.path.join(model_dir, f"{self.model_name}_best.pth")
+        elif mode == 'epoch':
+            save_path = os.path.join(model_dir, f"{self.model_name}_epoch_{self.last_epoch}.pth")
+        else:
+            raise ValueError("Invalid mode. Use 'latest', 'best', or 'epoch'.")
 
         save_dict = {
-            'epoch': epoch,
+            'epoch': self.last_epoch,
             'model_state_dict': self.state_dict(),
-            'best_val': self.best_val  # 保存最佳验证集性能
+            'best_val': self.best_val
         }
-
-        if optimizer is not None:
-            save_dict['optimizer_state_dict'] = optimizer.state_dict()
+        if self.optimizer is not None:
+            save_dict['optimizer_state_dict'] = self.optimizer.state_dict()
 
         torch.save(save_dict, save_path)
         print(f"Model saved to {save_path}")
 
-
-    def _remove_batchnorm_state(self, checkpoint_model_state_dict):
-        """Remove batch normalization layer's runtime state parameters."""
-        return {k: v for k, v in checkpoint_model_state_dict.items() if "running_mean" not in k and "running_var" not in k and "num_batches_tracked" not in k}
-
-    def _load_model_parameters(self, optimizer, checkpoint):
-        # 移除检查点中批量归一化层的状态字典
-        checkpoint_model_state_dict = self._remove_batchnorm_state(checkpoint['model_state_dict'])
-        model_state_dict = self.state_dict()
-        new_model_state_dict = {}
-        # 记录未从检查点加载的参数名称
-        skipped_parameters = []
-
-        # 遍历模型的参数，检查是否存在于检查点中，且形状是否匹配
-        for name, parameter in self.named_parameters():
-            if name in checkpoint_model_state_dict and parameter.size() == checkpoint_model_state_dict[name].size():
-                # 如果匹配，则添加到新的状态字典中
-                new_model_state_dict[name] = checkpoint_model_state_dict[name]
-            else:
-                # 如果不匹配，保持模型当前的参数不变，并记录跳过的参数名称
-                new_model_state_dict[name] = model_state_dict[name]
-                skipped_parameters.append(name)
-        
-        self.load_state_dict(new_model_state_dict, strict=False)
-        if skipped_parameters:
-            print("Skipped parameters (not loaded from checkpoint):")
-            for param_name in skipped_parameters:
-                print(param_name)
-        
-        # # 保留原来的优化器加载逻辑
-        # if optimizer is not None and 'optimizer_state_dict' in checkpoint:
-        #     try:
-        #         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-        #     except Exception as e:
-        #         print(f"Failed to load optimizer state: {e}")
-        
-
-    def _get_load_path(self, specified_path, model_name, model_dir, mode):
-        if specified_path:
-            return specified_path
-        if mode == 0:
-            pattern = os.path.join(model_dir, f'{model_name}_epoch_*.pth')
-            files = glob.glob(pattern)
-            epochs = [int(re.search('epoch_([0-9]+)', f).group(1)) for f in files]
-            if epochs:
-                return os.path.join(model_dir, f'{model_name}_epoch_{max(epochs)}.pth')
-        elif mode == 1:
-            return os.path.join(model_dir, f'{model_name}.pth')
-        elif mode == 2:
-            files = glob.glob(os.path.join(model_dir, f'{model_name}_*.pth'))
-            if files:
-                return sorted(files, key=os.path.getmtime)[-1]
-        elif mode == 3:
-            return os.path.join(model_dir, f'{model_name}_best.pth')
-        return None
-
-
-    def _determine_save_path(self, model_dir, model_name, last_epoch, mode):
-        if mode == 0:
-            return os.path.join(model_dir, f'{model_name}_epoch_{last_epoch}.pth')
-        elif mode == 1:
-            return os.path.join(model_dir, f'{model_name}.pth')
-        elif mode == 2:
-            timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-            return os.path.join(model_dir, f'{model_name}_{timestamp}.pth')
-        elif mode == 3:
-            return os.path.join(model_dir, f'{model_name}_best.pth')
+    def load(self, model_dir='./checkpoints', mode='latest', optimizer=None):
+        """
+        从指定路径加载模型。
+        :param model_dir: 模型文件的目录
+        :param mode: 加载模式，'latest'、'best' 或 'epoch'。
+        :param optimizer: 优化器实例（可选）
+        """
+        # 根据 mode 确定文件路径
+        if mode == 'latest':
+            load_path = os.path.join(model_dir, f"{self.model_name}_latest.pth")
+        elif mode == 'best':
+            load_path = os.path.join(model_dir, f"{self.model_name}_best.pth")
+        elif mode == 'epoch':
+            load_path = os.path.join(model_dir, f"{self.model_name}_epoch_{self.last_epoch}.pth")
         else:
-            raise ValueError(f"Unsupported mode: {mode}")
+            raise ValueError("Invalid mode. Use 'latest', 'best', or 'epoch'.")
+
+        if os.path.exists(load_path):
+            print(f"Loading model from {load_path}")
+            checkpoint = torch.load(load_path)
+
+            self.load_state_dict(checkpoint['model_state_dict'])
+            print(f"Model successfully loaded from {load_path}, epoch: {checkpoint.get('epoch', 'unknown')}.")
+
+            if optimizer and 'optimizer_state_dict' in checkpoint:
+                optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+                print("Optimizer state loaded.")
+
+            self.last_epoch = checkpoint.get('epoch', 0)
+            self.best_val = checkpoint.get('best_val', 0)
+        else:
+            print(f"No model found at {load_path}, starting from scratch.")
+            self.last_epoch = 0
+            self.best_val = 0
+
+    def transfer(self, specified_path, strict=False):
+        """
+        使用指定路径加载预训练模型参数，并将符合条件的参数转移到当前模型（不改变训练状态）。
+        :param specified_path: 指定的权重文件路径。
+        :param strict: 是否严格匹配层结构。如果为False，将跳过不匹配的参数。
+        """
+        if not specified_path or not os.path.exists(specified_path):
+            raise FileNotFoundError(f"Specified path does not exist: {specified_path}")
+
+        print(f"Transferring model parameters from {specified_path}")
+        checkpoint = torch.load(specified_path)
+        checkpoint_state_dict = checkpoint.get('model_state_dict', checkpoint)
+        model_state_dict = self.state_dict()
+
+        new_state_dict = {}
+        missing_parameters = []
+        extra_parameters = []
+
+        for name, parameter in model_state_dict.items():
+            if name in checkpoint_state_dict:
+                if checkpoint_state_dict[name].size() == parameter.size():
+                    new_state_dict[name] = checkpoint_state_dict[name]
+                else:
+                    extra_parameters.append(name)
+            else:
+                missing_parameters.append(name)
+
+        self.load_state_dict(new_state_dict, strict=False)
+        print(f"Successfully transferred {len(new_state_dict)} parameters from {specified_path}")
+
+        if missing_parameters:
+            print(f"Parameters not found in checkpoint (using default): {missing_parameters}")
+        if extra_parameters:
+            print(f"Parameters in checkpoint but not used due to size mismatch: {extra_parameters}")
+
+        print(f"Transfer completed. Matched: {len(new_state_dict)}, Missing: {len(missing_parameters)}, Size mismatch: {len(extra_parameters)}.")
