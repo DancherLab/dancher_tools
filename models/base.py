@@ -5,7 +5,7 @@ import glob
 from datetime import datetime
 import re
 from tqdm import tqdm
-from utils.losses import CombinedLoss 
+from dancher_tools.utils import CombinedLoss 
 
 class base(nn.Module):
     def __init__(self):
@@ -18,26 +18,27 @@ class base(nn.Module):
         self.metrics = []
 
 
+    # 在 base.py 中
     def compile(self, optimizer, criterion, metrics=None, loss_weights=None):
         """
         设置模型的优化器、损失函数和评价指标。
         :param optimizer: 优化器实例
-        :param criterion: 单一损失函数或损失函数列表
+        :param criterion: 损失函数实例或损失函数列表
         :param metrics: 指标函数列表
         :param loss_weights: 损失函数对应的权重列表（如果 criterion 是列表）
         """
         self.optimizer = optimizer
 
-        # 检查 criterion 是否为列表，如果是则创建 CombinedLoss
-        if isinstance(criterion, list):
-            losses = [loss() if isinstance(loss, type) else loss for loss in criterion]
-            self.criterion = CombinedLoss(losses=losses, weights=loss_weights)
-        elif isinstance(criterion, nn.Module):
-            self.criterion = criterion
+        # 如果 criterion 是列表，则创建 CombinedLoss
+        if isinstance(criterion, list) and len(criterion) > 1:
+            self.criterion = CombinedLoss(losses=criterion, weights=loss_weights)
+        elif isinstance(criterion, list) and len(criterion) == 1:
+            self.criterion = criterion[0]  # 单一损失函数
         else:
-            raise ValueError("criterion must be a nn.Module instance or a list of loss functions.")
+            raise ValueError("Criterion must be a list of loss functions, even if only one is provided.")
 
         self.metrics = metrics if metrics is not None else []
+
         
     def fit(
         self,
@@ -180,7 +181,7 @@ class base(nn.Module):
 
         if os.path.exists(load_path):
             print(f"Loading model from {load_path}")
-            checkpoint = torch.load(load_path)
+            checkpoint = torch.load(load_path, weights_only=True)
 
             self.load_state_dict(checkpoint['model_state_dict'])
             print(f"Model successfully loaded from {load_path}, epoch: {checkpoint.get('epoch', 'unknown')}.")
