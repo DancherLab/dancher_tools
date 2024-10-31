@@ -87,7 +87,7 @@ class base(nn.Module):
                     best_val_loss = val_loss
                     patience_counter = 0
                     # 保存最佳模型
-                    self.save(epoch, model_dir=model_save_dir, mode='best')
+                    self.save(model_dir=model_save_dir, mode='best')
                     print("Best model saved.")
                 else:
                     patience_counter += 1
@@ -98,7 +98,7 @@ class base(nn.Module):
                 val_loss = None  # 如果没有验证集，不使用早停
 
             # 每个 epoch 末保存最新模型
-            self.save(epoch=epoch, model_dir=model_save_dir, mode='latest')
+            self.save(model_dir=model_save_dir, mode='latest')
 
         print("Training complete.")
 
@@ -130,15 +130,14 @@ class base(nn.Module):
 
         print(f"Evaluation Loss: {avg_loss:.4f}, Metrics: {avg_metrics}")
         return avg_loss, avg_metrics
-    
+        
     def save(self, model_dir='./checkpoints', mode='latest'):
         """
         保存模型至指定目录。
         :param model_dir: 保存的文件夹路径
         :param mode: 保存模式，'latest'、'best' 或 'epoch'。
         """
-        if not os.path.exists(model_dir):
-            os.makedirs(model_dir)
+        os.makedirs(model_dir, exist_ok=True)
 
         # 根据 mode 确定文件名
         if mode == 'latest':
@@ -150,16 +149,21 @@ class base(nn.Module):
         else:
             raise ValueError("Invalid mode. Use 'latest', 'best', or 'epoch'.")
 
+        # 保存的状态字典
         save_dict = {
             'epoch': self.last_epoch,
             'model_state_dict': self.state_dict(),
             'best_val': self.best_val
         }
-        if self.optimizer is not None:
+
+        # 检查是否有定义优化器并存储
+        if getattr(self, 'optimizer', None) is not None:
             save_dict['optimizer_state_dict'] = self.optimizer.state_dict()
 
+        # 执行保存
         torch.save(save_dict, save_path)
         print(f"Model saved to {save_path}")
+
 
     def load(self, model_dir='./checkpoints', mode='latest', optimizer=None):
         """
