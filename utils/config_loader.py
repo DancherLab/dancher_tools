@@ -2,125 +2,150 @@ import argparse
 import yaml
 import os
 
+# 必需和可选的通用参数字典
+required_common_parameters = {
+    'type': str,  # 用于确定任务类型
+    'model_name': str,
+}
+optional_common_parameters = {
+    'weight': (str, None),
+    'load_mode': (str, 'latest'),
+    'learning_rate': (float, 0.001),
+    'batch_size': (int, 16),
+    'num_workers': (int, 4),
+    'patience': (int, 10),
+    'delta': (float, 0.01),
+    'loss': (str, 'bce'),
+    "transfer": (bool, False),
+    'loss_weights': (str, None),
+    'num_epochs': (int, 100),
+    'model_save_dir': (str, 'checkpoints'),
+    'metrics': (str, None),
+    'export': (bool, False),
+}
+
 class Config:
-    """简单的配置类，支持通过属性访问配置参数"""
+    """支持通过属性访问配置参数的配置类"""
     def __init__(self, config_dict):
         for key, value in config_dict.items():
             setattr(self, key, value)
 
 def load_yaml_config(config_file):
-    """读取 YAML 配置文件"""
+    """加载并解析 YAML 配置文件"""
     if not os.path.exists(config_file):
         raise FileNotFoundError(f"Config file '{config_file}' does not exist.")
     
     with open(config_file, 'r', encoding='utf-8') as f:
-        config = yaml.safe_load(f) or {}
-    return config
+        return yaml.safe_load(f) or {}
 
-def validate_and_set_defaults(config):
-    """验证配置参数的类型，并设置默认值。若缺少必需参数则抛出错误。"""
+def get_task_parameters(task_type):
+    """根据任务类型动态加载任务特定参数"""
+    try:
+        if task_type == 'segmentation':
+            from ..tasks.segmentation.params import required_parameters, optional_parameters
+        elif task_type == 'regression':
+            from ..tasks.regression.params import required_parameters, optional_parameters
+        elif task_type == 'classification':
+            from ..tasks.classification.params import required_parameters, optional_parameters
+        else:
+            raise ValueError(f"Unsupported task type: {task_type}")
+        return required_parameters, optional_parameters
+    except ImportError as e:
+        raise ImportError(f"Failed to load parameters for task '{task_type}': {e}")
+
+def parse_loss_weights(loss_weights_str):
+    """解析逗号分隔的损失权重字符串"""
+    try:
+        return [float(w) for w in loss_weights_str.split(",")]
+    except ValueError:
+        raise ValueError("Parameter 'loss_weights' should be a comma-separated list of numbers.")
+
+def parse_metrics(metrics_str):
+    """解析逗号分隔的指标字符串"""
+    return [metric.strip() for metric in metrics_str.split(',')]
+
+def validate_and_set_defaults(config, task_type):
+    """验证配置参数并根据任务类型设置默认值"""
     validated_config = {}
     errors = []
 
-    # 必需参数列表（没有默认值的参数）
-    required_params = {
-        'model_name': str,
-        'img_size': int,
-        'num_classes': int,
-        'dataset_path': str,
-        'train_paths': list,
-        'test_paths': list,
-        'model_save_dir': str
-    }
-
-    # 默认参数列表（有默认值的参数）
-    default_params = {
-        'vit_patches_size': 16,
-        'n_skip': 3,
-        'batch_size': 16,
-        'num_workers': 4,
-        'color_map': {},
-        'augmentations': False,
-        'num_epochs': 100,
-        'learning_rate': 0.001,
-        'patience': 10,
-        'delta': 0.01,
-        'weight': None,
-        'load_mode': 0,
-        'loss': 'bce',
-        'loss_weights': None
-    }
-
-    # 检查必需参数是否存在，且类型匹配
-    for param, param_type in required_params.items():
-        if param not in config and param != 'train_paths' and param != 'test_paths' and param != 'dataset_path':
-            errors.append(f"Missing required parameter '{param}' of type {param_type.__name__}.")
-        elif param in config and not isinstance(config[param], param_type):
-            actual_type = type(config[param]).__name__
-            errors.append(f"Parameter '{param}' should be of type {param_type.__name__}, but got {actual_type}.")
-
-    # 特殊处理 datasets 部分
-    if 'datasets' in config:
-        datasets = config['datasets']
-        
-        # 检查 datasets 中的路径信息
-        if 'path' in datasets:
-            validated_config['dataset_path'] = datasets['path']
-        else:
-            errors.append("Missing required parameter 'path' in 'datasets'.")
-
-        # 检查 train 和 test 列表
-        if 'train' in datasets:
-            validated_config['train_paths'] = [os.path.join(validated_config['dataset_path'], path) for path in datasets['train']]
-        else:
-            errors.append("Missing required parameter 'train' in 'datasets'.")
-
-        if 'test' in datasets:
-            validated_config['test_paths'] = [os.path.join(validated_config['dataset_path'], path) for path in datasets['test']]
-        else:
-            errors.append("Missing required parameter 'test' in 'datasets'.")
-    else:
-        errors.append("Missing required 'datasets' configuration.")
-
-    # 如果有错误，抛出异常并列出所有错误
-    if errors:
-        error_message = "Configuration validation errors:\n" + "\n".join(errors)
-        raise ValueError(error_message)
-
-    # 对其余必需参数赋值
-    for param in required_params:
-        if param in config and param not in validated_config:  # 确保没有被 'datasets' 覆盖
+    # 检查必需的通用参数
+    for param, param_type in required_common_parameters.items():
+        if param in config and isinstance(config[param], param_type):
             validated_config[param] = config[param]
+        else:
+            errors.append(f"Missing or invalid required parameter '{param}'.")
 
-    # 设置默认值的参数
-    for param, default_value in default_params.items():
-        validated_config[param] = config.get(param, default_value)
+    # 检查可选的通用参数并设置默认值
+    for param, (param_type, default_value) in optional_common_parameters.items():
+        if param in config:
+            # 特殊处理 loss_weights 和 metrics
+            if param == "loss_weights" and isinstance(config[param], str):
+                validated_config[param] = parse_loss_weights(config[param])
+            elif param == "metrics" and isinstance(config[param], str):
+                validated_config[param] = parse_metrics(config[param])
+            elif isinstance(config[param], param_type):
+                validated_config[param] = config[param]
+            else:
+                errors.append(f"Parameter '{param}' should be of type {param_type.__name__}.")
+        else:
+            validated_config[param] = default_value
 
-    # 特殊参数类型检查
-    if not isinstance(validated_config['train_paths'], list):
-        raise TypeError("train_paths should be a list.")
-    if not isinstance(validated_config['test_paths'], list):
-        raise TypeError("test_paths should be a list.")
-    if not isinstance(validated_config['color_map'], dict):
-        raise TypeError("color_map should be a dictionary.")
+    # 获取任务特定的参数并验证
+    required_params, optional_params = get_task_parameters(task_type)
+    for param, param_type in required_params.items():
+        if param in config and isinstance(config[param], param_type):
+            validated_config[param] = config[param]
+        else:
+            errors.append(f"Missing or invalid required task-specific parameter '{param}'.")
+
+    for param, (param_type, default_value) in optional_params.items():
+        if param in config and isinstance(config[param], param_type):
+            validated_config[param] = config[param]
+        else:
+            validated_config[param] = default_value
+
+    # 处理 `datasets` 字段，支持多数据集配置
+    if 'datasets' in config:
+        validated_datasets = []
+        for ds in config['datasets']:
+            if all(k in ds for k in ['name', 'path', 'train', 'test']):
+                dataset_config = {
+                    'name': ds['name'],
+                    'train_paths': [os.path.join(ds['path'], p) for p in ds['train']],
+                    'test_paths': [os.path.join(ds['path'], p) for p in ds['test']]
+                }
+                validated_datasets.append(dataset_config)
+            else:
+                errors.append("Each dataset entry must contain 'name', 'path', 'train', and 'test' fields.")
+        validated_config['datasets'] = validated_datasets
+    else:
+        errors.append("Missing 'datasets' configuration.")
+
+    # 抛出错误信息
+    if errors:
+        raise ValueError("Configuration validation errors:\n" + "\n".join(errors))
 
     # 创建模型保存路径
-    if not os.path.exists(validated_config['model_save_dir']):
-        os.makedirs(validated_config['model_save_dir'])
-
+    os.makedirs(validated_config['model_save_dir'], exist_ok=True)
     return validated_config
 
-def get_config():
-    """解析唯一命令行参数 --config，并加载 YAML 配置文件"""
-    parser = argparse.ArgumentParser(description='Load Configuration File')
-    parser.add_argument('--config', type=str, required=True, help='Path to the config file')
-    args = parser.parse_args()
+def get_config(config_file=None):
+    """加载 YAML 配置文件并验证配置参数"""
+    if config_file:
+        config = load_yaml_config(config_file)
+    else:
+        parser = argparse.ArgumentParser(description='Load Configuration File')
+        parser.add_argument('--config', type=str, required=True, help='Path to the config file')
+        args = parser.parse_args()
+        config = load_yaml_config(args.config)
 
-    # 加载 YAML 配置
-    config = load_yaml_config(args.config)
-    # 验证和设置默认值
-    validated_config = validate_and_set_defaults(config)
-    print(f"Loaded and validated config from {args.config}: {validated_config}")
+    # 确保 'type' 参数存在
+    task_type = config.get('type')
+    if not task_type:
+        raise ValueError("Missing 'type' parameter in config file.")
     
-    # 返回 Config 对象而不是字典
+    validated_config = validate_and_set_defaults(config, task_type)
+    print(f"Loaded and validated config from {config_file}: {validated_config}")
+    
     return Config(validated_config)

@@ -15,7 +15,10 @@ def get_model(args, device):
     if args.model_name.lower() == 'lstm':
         from Regression.LSTM import LSTM
         model = LSTM().to(device)
+    elif args.model_name.lower() == 'flato':
+        from models.FLaTO import FLaTO
+        model = FLaTO(img_size=args.img_size, num_classes=args.num_classes)
     else:
-        raise ValueError(f"Unsupported model name: {args.model_name}. Currently, only 'lstm' is supported.")
+        raise ValueError(f"Unsupported model name: {args.model_name}.")
 
-    return model
+    return model.to(device)
