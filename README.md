@@ -10,7 +10,6 @@ Dancher-Tools 是一个即插即用的深度学习框架，基于 PyTorch 构建
 
 ```bash
 git clone https://github.com/username/dancher-tools.git
-cd dancher-tools
 ```
 
 ### 2. 准备模型
