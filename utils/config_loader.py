@@ -4,7 +4,7 @@ import os
 
 # 必需和可选的通用参数字典
 required_common_parameters = {
-    'type': str,  # 用于确定任务类型
+    'task': str,  # 用于确定任务类型
     'model_name': str,
 }
 optional_common_parameters = {

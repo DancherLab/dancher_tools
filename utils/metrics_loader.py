@@ -6,11 +6,11 @@ def get_metrics(args):
     """
     try:
         # 根据任务类型导入对应的预设指标
-        if args.type == 'segmentation':
+        if args.task == 'segmentation':
             from ..tasks.segmentation.metrics import PRESET_METRICS
-        elif args.type == 'regression':
+        elif args.task == 'regression':
             from tasks.regression.metrics import PRESET_METRICS
-        elif args.type == 'classification':
+        elif args.task == 'classification':
             from tasks.classification.metrics import PRESET_METRICS
         else:
             raise ValueError(f"Unsupported task type: {args.type}")
