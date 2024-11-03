@@ -141,9 +141,9 @@ def get_config(config_file=None):
         config = load_yaml_config(args.config)
 
     # 确保 'type' 参数存在
-    task_type = config.get('type')
+    task_type = config.get('task')
     if not task_type:
-        raise ValueError("Missing 'type' parameter in config file.")
+        raise ValueError("Missing 'task' parameter in config file.")
     
     validated_config = validate_and_set_defaults(config, task_type)
     print(f"Loaded and validated config from {config_file}: {validated_config}")

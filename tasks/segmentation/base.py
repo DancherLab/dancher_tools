@@ -26,7 +26,7 @@ class SegModel(Core):
         early_stopping = EarlyStopping(patience=patience, delta=delta)
         device = next(self.parameters()).device  # 获取模型所在设备
         current_epoch = getattr(self, 'last_epoch', 0)
-        total_epochs = current_epoch + num_epochs
+        total_epochs = num_epochs
 
         # 选择第一个评价指标作为最佳值的依据
         first_metric = list(self.metrics.keys())[0]
@@ -82,9 +82,6 @@ class SegModel(Core):
 
 
     def evaluate(self, data_loader, save_dir='.', export=False):
-        """
-        在测试集或验证集上评估模型，使用 compile 设置的 metrics 计算评价指标。
-        """
         device = next(self.parameters()).device  # 获取模型所在设备
         self.eval()
         metric_results = {metric_name: [] for metric_name in self.metrics}  # 初始化每个指标的结果列表
@@ -95,27 +92,31 @@ class SegModel(Core):
                 images = images.to(device)
                 masks = masks.to(device).squeeze(1).float()
 
-                self.optimizer.zero_grad()
                 outputs = self(images)
                 outputs = outputs.squeeze(1)
+
+                # 计算损失
                 loss = self.criterion(outputs, masks)
                 total_loss += loss.item()
 
+                # 应用 sigmoid 和二值化
+                binary_outputs = (torch.sigmoid(outputs) > 0.5).float()
+
                 # 计算并记录每个指标的结果
                 for metric_name, metric_fn in self.metrics.items():
-                    result = metric_fn(outputs, masks)
+                    result = metric_fn(binary_outputs, masks)  # 使用二值化后的输出
                     metric_results[metric_name].append(result)
 
                 # 可选：如果需要导出预测结果
                 if export:
                     save_dir = os.path.join(save_dir, 'outputs')
                     os.makedirs(save_dir, exist_ok=True)
-                    predicted = (torch.sigmoid(outputs) > 0.5).float().cpu().numpy()
+                    predicted = binary_outputs.cpu().numpy()
                     for i in range(predicted.shape[0]):
                         output_image = (predicted[i] * 255).astype(np.uint8)
                         output_path = os.path.join(save_dir, f'output_{i}.png')
                         Image.fromarray(output_image).save(output_path)
-                
+
         # 计算平均验证损失
         avg_val_loss = total_loss / len(data_loader)
 

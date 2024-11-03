@@ -41,6 +41,7 @@ class DatasetRegistry:
         except ImportError:
             raise ValueError(f"Dataset type '{dataset_name}' is not recognized.")
 
+
 def get_dataloaders(args):
     """
     根据给定的参数返回训练和测试数据加载器。
@@ -83,6 +84,7 @@ def get_dataloaders(args):
                 images_dir=train_images_dir,
                 masks_dir=train_masks_dir,
                 image_filenames=train_images,
+                img_size=image_size,
                 transform=transform
             )
             train_datasets.append(train_dataset)
@@ -100,6 +102,7 @@ def get_dataloaders(args):
                 images_dir=test_images_dir,
                 masks_dir=test_masks_dir,
                 image_filenames=test_images,
+                img_size=image_size,
                 transform=transform
             )
             test_datasets.append(test_dataset)

@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 
-# 容忍微小的数值避免除零错误
+# 小值避免除零错误
 EPSILON = 1e-6
 
 def mIoU(predicted, target):
@@ -13,9 +13,11 @@ def mIoU(predicted, target):
     """
     iou_scores = []
     for pred, tgt in zip(predicted, target):
+        pred = (pred > 0.5).float()  # 阈值化
+        tgt = (tgt > 0.5).float()    # 确保 target 也是二值的
         intersection = torch.logical_and(pred, tgt).float().sum()
         union = torch.logical_or(pred, tgt).float().sum() + EPSILON
-        iou = (intersection + EPSILON) / union
+        iou = intersection / union
         iou_scores.append(iou.item())
     return np.mean(iou_scores)
 
@@ -28,9 +30,11 @@ def precision(predicted, target):
     """
     precision_scores = []
     for pred, tgt in zip(predicted, target):
+        pred = (pred > 0.5).float()  # 阈值化
+        tgt = (tgt > 0.5).float()    # 确保 target 也是二值的
         true_positive = torch.logical_and(pred, tgt).float().sum()
         predicted_positive = pred.float().sum() + EPSILON
-        precision_score = (true_positive + EPSILON) / predicted_positive
+        precision_score = true_positive / predicted_positive
         precision_scores.append(precision_score.item())
     return np.mean(precision_scores)
 
@@ -43,9 +47,15 @@ def recall(predicted, target):
     """
     recall_scores = []
     for pred, tgt in zip(predicted, target):
+        pred = (pred > 0.5).float()  # 阈值化
+        tgt = (tgt > 0.5).float()    # 确保 target 也是二值的
         true_positive = torch.logical_and(pred, tgt).float().sum()
         actual_positive = tgt.float().sum() + EPSILON
-        recall_score = (true_positive + EPSILON) / actual_positive
+        recall_score = true_positive / actual_positive
+        
+        # 调试信息：确保 recall 不超过 1
+        assert recall_score <= 1, f"Recall score exceeds 1: {recall_score}"
+        
         recall_scores.append(recall_score.item())
     return np.mean(recall_scores)
 
@@ -58,7 +68,15 @@ def f1_score(predicted, target):
     """
     precision_value = precision(predicted, target)
     recall_value = recall(predicted, target)
-    f1 = (2 * precision_value * recall_value) / (precision_value + recall_value + EPSILON)
+    
+    if precision_value + recall_value == 0:
+        return 0.0
+    
+    f1 = 2 * (precision_value * recall_value) / (precision_value + recall_value + EPSILON)
+    
+    # 调试信息：确保 F1 score 不超过 1
+    assert f1 <= 1, f"F1 score exceeds 1: {f1}"
+    
     return f1
 
 # 用于 segmentation 任务的预设指标字典
