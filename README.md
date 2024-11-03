@@ -33,7 +33,7 @@ Dancher-Tools 通过 YAML 文件配置模型和训练参数，确保流程清晰
 # configs/config.yaml
 
 model_name: 'MyModel'
-type: 'segmentation'
+task: 'segmentation'
 img_size: 224
 num_classes: 1
 datasets:
