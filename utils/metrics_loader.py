@@ -13,7 +13,11 @@ def get_metrics(args):
         elif args.task == 'classification':
             from ..tasks.classification.metrics import PRESET_METRICS
         else:
-            raise ValueError(f"Unsupported task type: {args.type}")
+            raise ValueError(f"Unsupported task type: {args.task}")
+
+        # 如果 args.metrics 为 None，则不使用任何指标
+        if args.metrics is None:
+            return {}
 
         # 确保配置文件中的 metrics 是一个列表
         metrics_list = args.metrics if isinstance(args.metrics, list) else [m.strip() for m in args.metrics.split(',')]
@@ -28,11 +32,10 @@ def get_metrics(args):
 
         # 确认返回的 metrics 字典有效
         if not metrics:
-            raise ValueError(f"No valid metrics found for task '{args.type}' with names: {metrics_list}")
+            print(f"No valid metrics found for task '{args.task}' with names: {metrics_list}")
 
-        # print(f"Loaded metrics: {list(metrics.keys())}")
         return metrics
     except ImportError as e:
-        raise ImportError(f"Failed to load metrics for task '{args.type}': {e}")
+        raise ImportError(f"Failed to load metrics for task '{args.task}': {e}")
     except Exception as ex:
         raise ValueError(f"Error in loading metrics: {ex}")
