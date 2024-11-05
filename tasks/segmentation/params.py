@@ -1,4 +1,4 @@
-# segmentation.params.py
+# dancher_tools/tasks/segmentation/params.py
 
 # 分割任务的必需参数
 required_parameters = {

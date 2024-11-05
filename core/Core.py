@@ -10,7 +10,7 @@ from dancher_tools.utils import CombinedLoss
 class Core(nn.Module):
     def __init__(self):
         super(Core, self).__init__()
-        self.model_name = 'core'  # Default model name
+        self.model_name = None  # Default model name
         self.last_epoch = 0  # Initialize last_epoch
         self.best_val = 0
         self.optimizer = None

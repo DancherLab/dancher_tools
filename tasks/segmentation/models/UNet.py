@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from dancher_tools import base
 
 
 class DoubleConv(nn.Module):
@@ -21,11 +20,11 @@ class DoubleConv(nn.Module):
         return self.double_conv(x)
 
 
-class UNet(base('segmentation')):
+class UNet(nn.Module):
     """UNet模型结构"""
-    def __init__(self, in_channels=3, out_channels=1):
+    def __init__(self, img_size, in_channels=3, num_classes=1):  # 使用 num_classes 代替 out_channels
         super(UNet, self).__init__()
-        
+        self.model_name = "UNet"
         # 下采样
         self.enc1 = DoubleConv(in_channels, 64)
         self.enc2 = DoubleConv(64, 128)
@@ -46,7 +45,7 @@ class UNet(base('segmentation')):
         self.dec1 = DoubleConv(128, 64)
         
         # 最终输出层
-        self.final_conv = nn.Conv2d(64, out_channels, kernel_size=1)
+        self.final_conv = nn.Conv2d(64, num_classes, kernel_size=1)  # 输出通道数变为 num_classes
 
     def forward(self, x):
         # 编码部分
@@ -77,4 +76,3 @@ class UNet(base('segmentation')):
         
         # 输出层
         return self.final_conv(dec1)
-

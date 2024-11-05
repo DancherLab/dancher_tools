@@ -7,11 +7,11 @@ from tqdm import tqdm
 import os
 
 class SegModel(Core):
-    def __init__(self, num_classes, *args, **kwargs):
+    def __init__(self, num_classes, img_size, *args, **kwargs):
         super(SegModel, self).__init__(*args, **kwargs)
-        self.model_name = 'segmentation_model'
+        self.model_name = None
         self.num_classes = num_classes
-
+        self.img_size = img_size
 
     def fit(self, train_loader, val_loader, num_epochs=500, model_save_dir='./checkpoints/', patience=15, delta=0.01):
         early_stopping = EarlyStopping(patience=patience, delta=delta)
@@ -28,14 +28,8 @@ class SegModel(Core):
             self.train()
             running_loss = 0.0
             for images, masks in tqdm(train_loader, desc='Training Batches', leave=False):
-                images = images.to(device)
-                
-                # 根据 criterion 设置标签格式
-                if isinstance(self.criterion, nn.CrossEntropyLoss):
-                    masks = masks.to(device).squeeze(1).long()  # CrossEntropyLoss 需要 long 类型标签
-                elif isinstance(self.criterion, nn.BCEWithLogitsLoss):
-                    masks = masks.to(device).unsqueeze(1).float()  # BCEWithLogitsLoss 需要 float 类型标签
-                
+                images, masks = images.to(device), masks.to(device)
+
                 self.optimizer.zero_grad()
                 outputs = self(images)
 
@@ -54,6 +48,7 @@ class SegModel(Core):
 
             epoch_loss = running_loss / len(train_loader)
             print(f'Epoch {epoch}/{total_epochs}, Loss: {epoch_loss:.4f}')
+            self.save(model_dir=model_save_dir, mode='latest')
 
             # 验证阶段
             val_loss, val_metrics = self.evaluate(val_loader)
@@ -82,13 +77,12 @@ class SegModel(Core):
         with torch.no_grad():
             for images, masks in tqdm(data_loader, desc='Evaluation Batches', leave=False):
                 images = images.to(device)
+                masks = masks.to(device)
                 
-                # 验证数据的标签类型设置
-                if isinstance(self.criterion, nn.CrossEntropyLoss):
-                    masks = masks.to(device).squeeze(1).long()  # 使用 long 类型标签
-                elif isinstance(self.criterion, nn.BCEWithLogitsLoss):
-                    masks = masks.to(device).unsqueeze(1).float()  # 使用 float 类型标签
-
+                # 确保 masks 的格式为单通道（适用于多分类）
+                if masks.dim() > 3 and masks.size(1) > 1:  # 多分类情况
+                    masks = masks.argmax(dim=1)  # 取最大值索引
+                
                 outputs = self(images)
 
                 # 确保输出的通道数与类别数一致
@@ -100,9 +94,9 @@ class SegModel(Core):
                 total_loss += loss.item()
 
                 # 计算每个指标的结果
-                binary_outputs = torch.argmax(outputs, dim=1)
+                predicted_labels = torch.argmax(outputs, dim=1)
                 for metric_name, metric_fn in self.metrics.items():
-                    result = metric_fn(binary_outputs.float(), masks.float(), self.num_classes)
+                    result = metric_fn(predicted_labels, masks, self.num_classes)
                     metric_results[metric_name].append(result)
 
         avg_val_loss = total_loss / len(data_loader)
