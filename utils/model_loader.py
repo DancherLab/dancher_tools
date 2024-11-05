@@ -5,10 +5,10 @@ import torch
 
 def get_model(args, device):
     """
-    根据配置参数中的模型名称加载对应模型类。模型实例不依赖外部参数。
+    根据配置参数中的模型名称加载对应模型类。仅在分割任务中传递 `num_classes` 参数。
     
     参数:
-        args: 包含 `model_name` 和 `type` 的配置对象。
+        args: 包含 `model_name`, `task`, 和 `num_classes` 的配置对象。
         device: 设备（如 'cpu' 或 'cuda'）。
     
     返回:
@@ -16,6 +16,7 @@ def get_model(args, device):
     """
     model_name = args.model_name  # 保持原始大小写
     task_type = args.task
+    num_classes = args.num_classes if task_type == 'segmentation' else None  # 仅在 segmentation 任务中使用 num_classes
 
     # 任务类型到预设模型模块的映射
     task_to_preset_map = {
@@ -39,7 +40,11 @@ def get_model(args, device):
     if model_name in preset_models:
         try:
             model_class = preset_models[model_name]
-            model = model_class().to(device)
+            # 根据任务类型条件性地传递 num_classes
+            if task_type == 'segmentation':
+                model = model_class(num_classes=num_classes).to(device)
+            else:
+                model = model_class().to(device)
             print(f"Loaded model '{model_name}' from presets.")
             return model
         except Exception as e:
@@ -56,9 +61,12 @@ def get_model(args, device):
         custom_model_module = f"models.{model_name}"
         model_module = importlib.import_module(custom_model_module)
         
-        # 获取类并实例化
+        # 获取类并条件性地实例化
         model_class = getattr(model_module, model_name)
-        model = model_class().to(device)
+        if task_type == 'segmentation':
+            model = model_class(num_classes=num_classes).to(device)
+        else:
+            model = model_class().to(device)
         print(f"Loaded custom model '{model_name}' from 'models/{model_name}.py'.")
 
         return model
