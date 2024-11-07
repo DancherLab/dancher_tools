@@ -137,7 +137,7 @@ class Core(nn.Module):
             raise FileNotFoundError(f"Specified path does not exist: {specified_path}")
 
         print(f"Transferring model parameters from {specified_path}")
-        checkpoint = torch.load(specified_path)
+        checkpoint = torch.load(specified_path, weights_only=False)
         checkpoint_state_dict = checkpoint.get('model_state_dict', checkpoint)
         model_state_dict = self.state_dict()
 
