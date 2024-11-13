@@ -22,6 +22,7 @@ optional_common_parameters = {
     'model_save_dir': (str, 'checkpoints'),
     'metrics': (str, None),
     'export': (bool, False),
+    'conf': (bool, False),
 }
 
 class Config:

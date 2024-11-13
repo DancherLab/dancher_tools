@@ -1,5 +1,5 @@
 from dancher_tools.core import Core
-from dancher_tools.utils import EarlyStopping
+from dancher_tools.utils import EarlyStopping, ConfidentLearning
 import torch
 import torch.nn as nn
 import numpy as np
@@ -7,17 +7,33 @@ from tqdm import tqdm
 import os
 
 class SegModel(Core):
-    def __init__(self, num_classes, img_size, *args, **kwargs):
+    def __init__(self, num_classes, in_channels, img_size, *args, **kwargs):
         super(SegModel, self).__init__(*args, **kwargs)
         self.model_name = None
         self.num_classes = num_classes
         self.img_size = img_size
+        self.in_channels = in_channels
 
-    def fit(self, train_loader, val_loader, num_epochs=500, model_save_dir='./checkpoints/', patience=15, delta=0.01):
+    def fit(self, train_loader, val_loader, num_epochs=500, model_save_dir='./checkpoints/', patience=15, delta=0.01, conf=False):
         early_stopping = EarlyStopping(patience=patience, delta=delta)
         device = next(self.parameters()).device
         current_epoch = getattr(self, 'last_epoch', 0)
         total_epochs = num_epochs
+
+        if conf:
+            # 使用 Confident Learning 清理数据
+            print("Using Confident Learning to clean data...")
+            cl = ConfidentLearning(self, threshold=0.6)
+            noisy_indices = cl.identify_noisy_labels(train_loader, device)
+            cleaned_dataset = cl.clean_data(train_loader.dataset, noisy_indices)
+            
+            # 重新初始化 train_loader
+            train_loader = torch.utils.data.DataLoader(
+                cleaned_dataset,
+                batch_size=train_loader.batch_size,
+                shuffle=True,
+                num_workers=train_loader.num_workers
+            )
 
         first_metric = list(self.metrics.keys())[0]
         best_val = None
@@ -67,6 +83,7 @@ class SegModel(Core):
 
         self.load(model_dir=model_save_dir, mode='best')
         print(f'Training complete. Best {first_metric}: {self.best_val:.4f}')
+
 
     def evaluate(self, data_loader):
         device = next(self.parameters()).device

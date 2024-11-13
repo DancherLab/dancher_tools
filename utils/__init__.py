@@ -1,7 +1,7 @@
 # dancher_tools/utils/__init__.py
 
 from .loss_loader import CombinedLoss, get_loss  # 导入并导出 CombinedLoss 类
-from .train_utils import EarlyStopping
+from .train_utils import EarlyStopping, ConfidentLearning
 from .config_loader import get_config  # 导入并导出 get_config 函数
 from .data_loader import get_dataloaders  # 导入并导出 get_dataloaders 函数
 from .model_loader import get_model

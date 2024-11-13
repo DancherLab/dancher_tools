@@ -8,5 +8,5 @@ required_parameters = {
 
 # 分割任务的可选参数（有默认值）
 optional_parameters = {
-
+    'in_channels': (int, 3),
 }

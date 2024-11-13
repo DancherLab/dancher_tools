@@ -22,7 +22,7 @@ class DoubleConv(nn.Module):
 
 class UNet(nn.Module):
     """UNet模型结构"""
-    def __init__(self, img_size, in_channels=3, num_classes=1):  # 使用 num_classes 代替 out_channels
+    def __init__(self, in_channels=3, num_classes=1):  # 使用 num_classes 代替 out_channels
         super(UNet, self).__init__()
         self.model_name = "UNet"
         # 下采样

@@ -4,17 +4,7 @@ import os
 import torch
 
 def get_model(args, device):
-    """
-    根据配置参数加载指定模型，并将自定义模型包装在基类中，以确保具备框架的全部功能。
-    
-    参数:
-        args: 配置对象，包含 `model_name`, `task`, 和 `num_classes` 等信息。
-        device: 设备（如 'cpu' 或 'cuda'）。
-    
-    返回:
-        经过基类包装的模型实例。
-    """
-    model_name = args.model_name  # 保持原始大小写
+    model_name = args.model_name
     task_type = args.task
 
     # 任务类型到模块路径和基类映射
@@ -36,7 +26,7 @@ def get_model(args, device):
     if task_type not in task_to_paths:
         raise ValueError(f"Unsupported task type: {task_type}. Supported types are {list(task_to_paths.keys())}")
 
-    # 获取对应的模块路径和基类名称
+    # 获取模块路径和基类名称
     paths = task_to_paths[task_type]
     base_module_path = paths['base_module_path']
     base_class_name = paths['base_class_name']
@@ -68,38 +58,38 @@ def get_model(args, device):
     except ImportError as e:
         raise ImportError(f"Failed to import preset models for task '{task_type}': {e}")
 
-    # 加载模型
-    if model_name in preset_models:
-        try:
+    # 加载并实例化模型（过滤所需参数）
+    try:
+        if model_name in preset_models:
             model_class = preset_models[model_name]
-            model_instance = model_class(**task_params).to(device)
             print(f"Loaded model '{model_name}' from presets.")
-        except Exception as e:
-            raise ValueError(f"Error instantiating model '{model_name}' from presets: {e}")
-    else:
-        # 加载自定义模型
-        try:
+        else:
+            # 加载自定义模型模块
             models_path = os.path.join(os.path.dirname(__file__), '../../models')
             if models_path not in sys.path:
                 sys.path.append(models_path)
-
             custom_model_module = f"models.{model_name}"
             model_module = importlib.import_module(custom_model_module)
             model_class = getattr(model_module, model_name)
-            model_instance = model_class(**task_params).to(device)
             print(f"Loaded custom model '{model_name}' from 'models/{model_name}.py'.")
 
-        except ImportError:
-            raise ImportError(f"Custom model module '{model_name}' not found in 'models' directory.")
-        except AttributeError:
-            raise AttributeError(f"Class '{model_name}' not found in 'models/{model_name}.py'.")
-        except Exception as e:
-            raise ValueError(f"Error in loading custom model '{model_name}': {e}")
+        # 过滤并传入模型所需的参数
+        model_params = {}
+        if hasattr(model_class, '__init__'):
+            init_params = model_class.__init__.__code__.co_varnames
+            for param in task_params:
+                if param in init_params:
+                    model_params[param] = task_params[param]
+
+        model_instance = model_class(**model_params).to(device)
+
+    except Exception as e:
+        raise ValueError(f"Error instantiating model '{model_name}': {e}")
 
     # 使用组合方式包装模型实例
     class WrappedModel(base_class):
         def __init__(self):
-            super(WrappedModel, self).__init__(**task_params)
+            super(WrappedModel, self).__init__(**{k: v for k, v in task_params.items() if k in base_class.__init__.__code__.co_varnames})
             self.model_instance = model_instance
             self.model_name = model_name
 
