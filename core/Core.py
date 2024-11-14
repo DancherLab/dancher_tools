@@ -133,10 +133,15 @@ class Core(nn.Module):
         :param specified_path: 指定的权重文件路径。
         :param strict: 是否严格匹配层结构。如果为False，将跳过不匹配的参数。
         """
-        if not specified_path or not os.path.exists(specified_path):
-            raise FileNotFoundError(f"Specified path does not exist: {specified_path}")
+        # 检查路径是否为 None 或路径是否存在
+        if not specified_path:
+            raise ValueError("Transfer path is not specified. Please provide a valid path for transferring weights.")
+        if not os.path.exists(specified_path):
+            raise FileNotFoundError(f"The specified transfer path does not exist: {specified_path}")
 
         print(f"Transferring model parameters from {specified_path}")
+        
+        # 加载检查点
         checkpoint = torch.load(specified_path, weights_only=False)
         checkpoint_state_dict = checkpoint.get('model_state_dict', checkpoint)
         model_state_dict = self.state_dict()
@@ -145,6 +150,7 @@ class Core(nn.Module):
         missing_parameters = []
         extra_parameters = []
 
+        # 匹配模型参数
         for name, parameter in model_state_dict.items():
             if name in checkpoint_state_dict:
                 if checkpoint_state_dict[name].size() == parameter.size():
@@ -154,9 +160,11 @@ class Core(nn.Module):
             else:
                 missing_parameters.append(name)
 
+        # 更新当前模型的参数
         self.load_state_dict(new_state_dict, strict=False)
         print(f"Successfully transferred {len(new_state_dict)} parameters from {specified_path}")
 
+        # 输出缺失和多余的参数信息
         if missing_parameters:
             print(f"Parameters not found in checkpoint (using default): {missing_parameters}")
         if extra_parameters:

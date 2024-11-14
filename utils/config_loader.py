@@ -8,7 +8,8 @@ required_common_parameters = {
     'model_name': str,
 }
 optional_common_parameters = {
-    'weight': (str, None),
+    'weights': (str, None),
+    "transfer_weights": (str, None),
     'load_mode': (str, 'latest'),
     'learning_rate': (float, 0.001),
     'batch_size': (int, 16),
@@ -16,13 +17,12 @@ optional_common_parameters = {
     'patience': (int, 10),
     'delta': (float, 0.01),
     'loss': (str, 'bce'),
-    "transfer": (bool, False),
     'loss_weights': (str, None),
     'num_epochs': (int, 100),
     'model_save_dir': (str, 'checkpoints'),
     'metrics': (str, None),
     'export': (bool, False),
-    'conf': (bool, False),
+    'conf_threshold': (float, False),
 }
 
 class Config:

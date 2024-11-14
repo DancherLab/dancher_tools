@@ -1,4 +1,9 @@
 # dancher_tools/utils/train_utils.py
+import torch
+import numpy as np
+from tqdm import tqdm
+from torch.utils.data import DataLoader
+
 
 class EarlyStopping:
     def __init__(self, patience=15, delta=0):
@@ -19,9 +24,6 @@ class EarlyStopping:
             self.best_loss = val_loss
             self.counter = 0
             
-import torch
-import numpy as np
-from tqdm import tqdm
 
 class ConfidentLearning:
     def __init__(self, model, threshold=0.6):
@@ -60,3 +62,30 @@ class ConfidentLearning:
         # 只保留干净的样本
         cleaned_data = torch.utils.data.Subset(dataset, [i for i in range(len(dataset)) if i not in noisy_indices])
         return cleaned_data
+
+
+def apply_CL(conf_threshold, model, train_loader, device):
+    """
+    使用置信学习清洗数据集，并返回一个新的 DataLoader（如果 conf_threshold 设置了值）。
+
+    :param args: 包含配置参数的对象，需包含 conf_threshold 属性
+    :param model: 需要评估的模型
+    :param train_loader: 原始训练数据的 DataLoader
+    :param device: 运行设备（如 'cpu' 或 'cuda'）
+    :return: 清洗后的 DataLoader（如果 conf_threshold 设置了值），否则返回原始的 train_loader
+    """
+
+    if conf_threshold is not None:
+        print("Using Confident Learning to clean data...")
+        cl = ConfidentLearning(model, threshold=conf_threshold)
+        noisy_indices = cl.identify_noisy_labels(train_loader, device)
+        cleaned_dataset = cl.clean_data(train_loader.dataset, noisy_indices)
+
+        # 创建并返回新的 DataLoader
+        return DataLoader(
+            cleaned_dataset,
+            batch_size=train_loader.batch_size,
+            shuffle=True,
+            num_workers=train_loader.num_workers
+        )
+    return train_loader

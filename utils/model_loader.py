@@ -97,3 +97,18 @@ def get_model(args, device):
             return self.model_instance(*args, **kwargs)
 
     return WrappedModel().to(device)
+
+
+
+def load_weights(model, args):
+    """
+    根据配置加载或迁移模型权重。
+    :param model: 初始化后的模型实例
+    :param args: 配置对象
+    """
+    if args.transfer_weights:  # 如果提供了迁移权重路径
+        print(f"Transferring model weights from {args.transfer_weights}")
+        model.transfer(specified_path=args.transfer_weights, strict=False)
+    else:
+        print("Loading model weights from specified path or defaults")
+        model.load(model_dir=args.model_save_dir, mode=args.load_mode, specified_path=args.weights)

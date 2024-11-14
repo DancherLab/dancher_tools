@@ -1,5 +1,5 @@
 from dancher_tools.core import Core
-from dancher_tools.utils import EarlyStopping, ConfidentLearning
+from dancher_tools.utils import EarlyStopping
 import torch
 import torch.nn as nn
 import numpy as np
@@ -14,26 +14,11 @@ class SegModel(Core):
         self.img_size = img_size
         self.in_channels = in_channels
 
-    def fit(self, train_loader, val_loader, num_epochs=500, model_save_dir='./checkpoints/', patience=15, delta=0.01, conf=False):
+    def fit(self, train_loader, val_loader, num_epochs=500, model_save_dir='./checkpoints/', patience=15, delta=0.01):
         early_stopping = EarlyStopping(patience=patience, delta=delta)
         device = next(self.parameters()).device
         current_epoch = getattr(self, 'last_epoch', 0)
         total_epochs = num_epochs
-
-        if conf:
-            # 使用 Confident Learning 清理数据
-            print("Using Confident Learning to clean data...")
-            cl = ConfidentLearning(self, threshold=0.6)
-            noisy_indices = cl.identify_noisy_labels(train_loader, device)
-            cleaned_dataset = cl.clean_data(train_loader.dataset, noisy_indices)
-            
-            # 重新初始化 train_loader
-            train_loader = torch.utils.data.DataLoader(
-                cleaned_dataset,
-                batch_size=train_loader.batch_size,
-                shuffle=True,
-                num_workers=train_loader.num_workers
-            )
 
         first_metric = list(self.metrics.keys())[0]
         best_val = None
