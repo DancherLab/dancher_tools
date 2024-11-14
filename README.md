@@ -169,7 +169,7 @@ if __name__ == '__main__':
 ## 支持的功能
 
 - **自动化训练与验证**：通过 `fit` 和 `evaluate` 方法完成模型训练和验证，支持自定义指标。
-- **迁移学习**：在 YAML 配置中设置 `transfer` 和 `weight` 来指定迁移学习的权重文件。
-- **Confident Learning 数据清洗**：当 `conf=True` 时，启用数据清洗以处理潜在的噪声标签。
+- **迁移学习**：在 YAML 配置中设置 `transfer_weights` 来指定迁移学习的权重文件。
+- **置信学习**：当 `conf_threshold`不为`None`时，启用数据清洗以处理潜在的噪声标签。
 
 
