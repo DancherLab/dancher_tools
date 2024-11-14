@@ -14,7 +14,7 @@ git clone https://github.com/username/dancher_tools.git
 
 ### 2. 准备模型
 
-将自定义的 PyTorch 模型文件直接放入 `models` 文件夹下。无需将模型继承 `base`，即可在框架中自动检测和调用。例如，假设我们定义了一个名为 `UNet.py` 的分割模型，将其放入 `models` 文件夹中即可。
+将自定义的 PyTorch 模型文件直接放入 `models` 文件夹下, 即可在框架中自动检测和调用。例如，假设我们定义了一个名为 `UNet.py` 的分割模型，将其放入 `models` 文件夹中即可。
 
 ## 配置 YAML 文件
 
