@@ -56,7 +56,7 @@ metrics: ['mIoU', 'precision', 'recall', 'f1_score']
 
 使用以下代码，加载您的模型、数据和 YAML 配置文件，开始模型的训练和评估。
 
-```
+```python
 import torch
 import sys
 import os
@@ -118,7 +118,7 @@ if __name__ == '__main__':
 
 使用以下代码加载并测试模型：
 
-```
+```python
 import torch
 import sys
 import os
