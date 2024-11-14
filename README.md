@@ -8,7 +8,7 @@ Dancher-Tools 是一个即插即用的深度学习框架，基于 PyTorch 构建
 
 首先，克隆项目代码：
 
-```
+```bash
 git clone https://github.com/username/dancher_tools.git
 ```
 
@@ -20,7 +20,7 @@ git clone https://github.com/username/dancher_tools.git
 
 Dancher-Tools 通过 YAML 文件配置模型和训练参数，确保流程清晰、简洁。以下是一个 YAML 文件（如 `UNet.yaml`）的示例配置：
 
-```
+```yaml
 # configs/UNet.yaml
 
 model_name: 'UNet'
