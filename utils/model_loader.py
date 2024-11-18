@@ -112,5 +112,5 @@ def load_weights(model, args):
         print(f"Transferring model weights from {args.transfer_weights}")
         model.transfer(specified_path=args.transfer_weights, strict=False)
     else:
-        print("Loading model weights from specified path or defaults")
+        # print("Loading model weights from specified path or defaults")
         model.load(model_dir=args.model_save_dir, mode=args.load_mode, specified_path=args.weights)

@@ -18,7 +18,7 @@ class Core(nn.Module):
         self.metrics = []
 
 
-    def compile(self, optimizer, criterion, metrics=None, loss_weights=None):
+    def compile(self,  criterion, optimizer=None, metrics=None, loss_weights=None):
         """
         设置模型的优化器、损失函数和评价指标。
         :param optimizer: 优化器实例
@@ -52,8 +52,6 @@ class Core(nn.Module):
 
         print(f"Model compiled with metrics: {list(self.metrics.keys())}")
 
-
-
         
     def save(self, model_dir='./checkpoints', mode='latest'):
         """
@@ -63,30 +61,41 @@ class Core(nn.Module):
         """
         os.makedirs(model_dir, exist_ok=True)
 
-        # 根据 mode 确定文件名
-        if mode == 'latest':
-            save_path = os.path.join(model_dir, f"{self.model_name}_latest.pth")
-        elif mode == 'best':
-            save_path = os.path.join(model_dir, f"{self.model_name}_best.pth")
-        elif mode == 'epoch':
-            save_path = os.path.join(model_dir, f"{self.model_name}_epoch_{self.last_epoch}.pth")
-        else:
-            raise ValueError("Invalid mode. Use 'latest', 'best', or 'epoch'.")
+        # 模式与文件名映射
+        mode_to_filename = {
+            'latest': f"{self.model_name}_latest.pth",
+            'best': f"{self.model_name}_best.pth",
+            'epoch': f"{self.model_name}_epoch_{self.last_epoch}.pth",
+        }
+
+        # 确认 mode 合法性
+        if mode not in mode_to_filename:
+            raise ValueError(f"Invalid mode '{mode}'. Valid options are: {list(mode_to_filename.keys())}")
+
+        save_path = os.path.join(model_dir, mode_to_filename[mode])
+
+        # 确定当前设备
+        device = next(self.parameters()).device
 
         # 保存的状态字典
         save_dict = {
-            'epoch': self.last_epoch,
-            'model_state_dict': self.state_dict(),
-            'best_val': self.best_val
+            'epoch': getattr(self, 'last_epoch', 0),
+            'model_state_dict': self.state_dict(),  # 不改变当前设备，直接保存
+            'best_val': getattr(self, 'best_val', None),
         }
 
-        # 检查是否有定义优化器并存储
-        if getattr(self, 'optimizer', None) is not None:
-            save_dict['optimizer_state_dict'] = self.optimizer.state_dict()
+        # # 检查并保存优化器状态（如有）
+        # optimizer = getattr(self, 'optimizer', None)
+        # if optimizer is not None:
+        #     save_dict['optimizer_state_dict'] = optimizer.state_dict()
 
-        # 执行保存
-        torch.save(save_dict, save_path)
-        print(f"Model saved to {save_path}")
+        # 执行保存，捕获异常
+        try:
+            torch.save(save_dict, save_path, pickle_protocol=4)  # 高效保存
+            print(f"Model successfully saved to {save_path}")
+        except Exception as e:
+            print(f"Failed to save model to {save_path}. Error: {str(e)}")
+
 
 
     def load(self, model_dir='./checkpoints', mode='latest', specified_path=None):

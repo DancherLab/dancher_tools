@@ -5,6 +5,12 @@ import torch
 from torch.utils.data import DataLoader, ConcatDataset
 from torchvision import transforms
 import importlib
+import numpy as np
+from PIL import Image
+from tqdm import tqdm
+
+from concurrent.futures import ThreadPoolExecutor
+
 
 class DatasetRegistry:
     """
@@ -34,29 +40,22 @@ class DatasetRegistry:
         if not dataset_class:
             raise ValueError(f"Dataset '{name}' not registered.")
         return dataset_class
-    
+
     @classmethod
     def load_dataset_module(cls, dataset_name):
+        """
+        动态加载数据集模块。
+        """
         try:
             importlib.import_module(f'datapacks.{dataset_name}')
             print(f"Successfully loaded dataset module: {dataset_name}")
         except ImportError:
             raise ValueError(f"Dataset type '{dataset_name}' is not recognized.")
 
+
 def get_dataloaders(args):
     """
-    通用数据加载器生成函数，直接从 `datapacks` 文件夹中动态加载数据集，返回训练和测试 DataLoader。
-    
-    参数:
-        args: 配置参数对象，包含以下属性：
-            - task: 任务类型（segmentation, regression, classification 等）
-            - datasets: 数据集配置，包含名称、路径等信息
-            - batch_size: 批次大小
-            - num_workers: 工作线程数
-            - img_size: 图像大小（如果适用）
-            
-    返回:
-        train_loader, test_loader: 训练和测试数据加载器。
+    通用数据加载器生成函数，支持缓存逻辑。
     """
     batch_size = args.batch_size
     num_workers = args.num_workers
@@ -71,54 +70,37 @@ def get_dataloaders(args):
 
     train_datasets, test_datasets = [], []
 
-    # 遍历配置中的每个数据集，直接从 `datapacks` 文件夹加载数据集
+    # 遍历配置中的每个数据集
     for dataset_config in args.datasets:
         dataset_name = dataset_config['name']
-        
+
         # 动态加载数据集模块并获取数据集类
         DatasetRegistry.load_dataset_module(dataset_name)
-        dataset_class = DatasetRegistry.get_dataset(dataset_name)
+        datapack = DatasetRegistry.get_dataset(dataset_name)
 
-        if args.task == 'regression':
-            # 对于 CSV 格式数据集（回归任务）
-            for train_path in dataset_config.get('train_paths', []):
-                train_dataset = dataset_class(csv_file=train_path)
-                train_datasets.append(train_dataset)
-            for test_path in dataset_config.get('test_paths', []):
-                test_dataset = dataset_class(csv_file=test_path)
-                test_datasets.append(test_dataset)
+        for train_path in dataset_config.get('train_paths', []):
+            train_cache_path = os.path.join(train_path, f"__cache__.npz")
+            if os.path.exists(train_cache_path):
+                print(f"Loading cached train dataset from {train_cache_path}")
+                train_data = np.load(train_cache_path)
+                train_dataset = datapack(train_data)
+            else:
+                # print(f"Creating cache for train dataset at {train_cache_path}")
+                train_data = create_cache(datapack, train_path, image_size, transform, train_cache_path)
+                train_dataset = datapack(train_data)
+            train_datasets.append(train_dataset)
 
-        else:
-            # 图像数据集（分割或分类任务）
-            for train_path in dataset_config.get('train_paths', []):
-                train_images_dir = os.path.join(train_path, 'images')
-                train_masks_dir = os.path.join(train_path, 'masks')
-                check_directory_exists(train_images_dir, train_masks_dir)
-
-                train_images = sorted(os.listdir(train_images_dir))
-                train_dataset = dataset_class(
-                    images_dir=train_images_dir,
-                    masks_dir=train_masks_dir,
-                    image_filenames=train_images,
-                    img_size=image_size,
-                    transform=transform
-                )
-                train_datasets.append(train_dataset)
-
-            for test_path in dataset_config.get('test_paths', []):
-                test_images_dir = os.path.join(test_path, 'images')
-                test_masks_dir = os.path.join(test_path, 'masks')
-                check_directory_exists(test_images_dir, test_masks_dir)
-
-                test_images = sorted(os.listdir(test_images_dir))
-                test_dataset = dataset_class(
-                    images_dir=test_images_dir,
-                    masks_dir=test_masks_dir,
-                    image_filenames=test_images,
-                    img_size=image_size,
-                    transform=transform
-                )
-                test_datasets.append(test_dataset)
+        for test_path in dataset_config.get('test_paths', []):
+            test_cache_path = os.path.join(test_path, f"__cache__.npz")
+            if os.path.exists(test_cache_path):
+                print(f"Loading cached test dataset from {test_cache_path}")
+                test_data = np.load(test_cache_path)
+                test_dataset = datapack(test_data)
+            else:
+                # print(f"Creating cache for test dataset at {test_cache_path}")
+                test_data = create_cache(datapack, test_path, image_size, transform, test_cache_path)
+                test_dataset = datapack(test_data)
+            test_datasets.append(test_dataset)
 
     # 合并数据集并创建 DataLoader
     combined_train_dataset = ConcatDataset(train_datasets) if train_datasets else None
@@ -140,7 +122,55 @@ def get_dataloaders(args):
 
     return train_loader, test_loader
 
-def check_directory_exists(images_dir, masks_dir):
-    """检查图像和掩码文件夹是否存在"""
-    if not os.path.exists(images_dir) or not os.path.exists(masks_dir):
-        raise FileNotFoundError(f"Required directory does not exist: {images_dir} or {masks_dir}")
+
+
+def process_file(filename, images_dir, masks_dir, transform, dataset_class, img_size):
+    """
+    单个文件的处理逻辑，支持并行化。
+    """
+    image_path = os.path.join(images_dir, filename)
+    mask_path = os.path.join(masks_dir, filename.replace('.jpg', '.png'))
+
+    image = Image.open(image_path).convert('RGB')
+    mask = Image.open(mask_path).convert('RGB')
+
+    # 图像和掩码处理
+    image = transform(image).numpy()
+    mask = dataset_class.convert_mask(np.array(mask), img_size)
+    return image, mask
+
+
+def create_cache(datapack, path, img_size, transform, cache_path):
+    """
+    使用多线程加快缓存创建。
+    """
+    images_dir = os.path.join(path, 'images')
+    masks_dir = os.path.join(path, 'masks')
+    images_files = sorted(os.listdir(images_dir))
+
+    images, masks = [], []
+    with ThreadPoolExecutor() as executor:
+        results = list(tqdm(
+            executor.map(
+                process_file,
+                images_files,
+                [images_dir] * len(images_files),
+                [masks_dir] * len(images_files),
+                [transform] * len(images_files),
+                [datapack] * len(images_files),
+                [img_size] * len(images_files)
+            ),
+            desc=f"Creating cache for {path}",
+            total=len(images_files)
+        ))
+
+    # 收集结果
+    for image, mask in results:
+        images.append(image)
+        masks.append(mask)
+
+    # 保存缓存
+    np.savez_compressed(cache_path, images=np.array(images), masks=np.array(masks))
+    print(f"Cache created at {cache_path}")
+
+    return {'images': np.array(images), 'masks': np.array(masks)}

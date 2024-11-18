@@ -25,6 +25,7 @@ optional_common_parameters = {
     'metrics': (str, None),
     'export': (bool, False),
     'conf_threshold': (float, None),
+    'save_interval': (int, 5),
 }
 
 class Config:
