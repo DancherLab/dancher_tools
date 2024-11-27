@@ -6,7 +6,7 @@ Dancher-Tools 是一个基于 PyTorch 的即插即用深度学习框架，旨在
 
 要使用 Dancher-Tools，您的项目文件目录需要组织如下：
 
-$$
+```
 project/
 ├── configs/           # 配置文件目录，存放 .yaml 配置文件
 │   └── sample.yaml    # 示例配置文件
@@ -19,21 +19,21 @@ project/
 │   └── MyModel.py     # 示例自定义模型文件
 ├── train.py           # 训练脚本
 ├── test.py            # 测试脚本
-$$
+```
 
 ### 运行说明
 
 - **训练模型**：
   使用以下命令，通过指定配置文件来启动训练：
-  $$bash
+  ```bash
   python train.py --configs configs/sample.yaml
-  $$
+  ```
 
 - **测试模型**：
   使用以下命令，通过指定配置文件来启动测试：
-  $$bash
+  ```bash
   python test.py --configs configs/sample.yaml
-  $$
+  ```
 
 通过这种目录结构和命令，您可以快速启动模型的训练与测试。
 
@@ -43,27 +43,27 @@ $$
 
 进入您需要创建项目的路径并创建文件夹：
 
-$$bash
+```bash
 mkdir project_name
 cd project_name
-$$
+```
 
 ### 2. 克隆 Dancher-Tools 代码
 
 在项目文件夹下，克隆 Dancher-Tools 代码：
 
-$$bash
+```bash
 git clone https://github.com/DancherLab/dancher_tools.git
-$$
+```
 
 ### 3. 安装依赖
 
 进入项目目录并安装所需的 Python 包：
 
-$$bash
+```bash
 cd dancher_tools
 pip install -r requirements.txt
-$$
+```
 
 ### 4. 自定义配置文件、模型和数据集
 
