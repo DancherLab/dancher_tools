@@ -30,7 +30,7 @@ class PositionalEncoding(nn.Module):
         return x
 
 
-class Transformer(base('regression')):
+class Transformer(nn.Module):
     def __init__(self, input_dim=4, hidden_dim=64, num_layers=4, num_heads=8, max_depth=1000):
         super(Transformer, self).__init__()
         

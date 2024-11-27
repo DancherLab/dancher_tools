@@ -2,7 +2,7 @@ from dancher_tools import base
 import torch.nn as nn
 
 
-class LSTM(base('regression')):
+class LSTM(nn.Module):
     def __init__(self):
         super(LSTM, self).__init__()
         # 设置模型的默认参数
