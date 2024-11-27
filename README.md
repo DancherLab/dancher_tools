@@ -2,26 +2,78 @@
 
 Dancher-Tools 是一个基于 PyTorch 的即插即用深度学习框架，旨在简化深度学习模型的开发和训练过程。无论您从事图像分割、回归还是分类任务，只需自定义配置文件、模型和数据集，即可快速构建高效的深度学习模型。
 
+## 项目文件目录
+
+要使用 Dancher-Tools，您的项目文件目录需要组织如下：
+
+$$
+project/
+├── configs/           # 配置文件目录，存放 .yaml 配置文件
+│   └── sample.yaml    # 示例配置文件
+├── dancher_tools/     # Dancher-Tools 框架代码
+├── datapacks/         # 数据集设置代码目录，存放自定义数据集处理的 .py 文件
+│   └── my_dataset.py  # 示例数据集处理代码
+├── datasets/          # 数据集目录，存放原始数据集文件
+│   └── my_dataset/    # 示例数据集目录
+├── models/            # 自定义模型目录，存放 .py 文件
+│   └── MyModel.py     # 示例自定义模型文件
+├── train.py           # 训练脚本
+├── test.py            # 测试脚本
+$$
+
+### 运行说明
+
+- **训练模型**：
+  使用以下命令，通过指定配置文件来启动训练：
+  $$bash
+  python train.py --configs configs/sample.yaml
+  $$
+
+- **测试模型**：
+  使用以下命令，通过指定配置文件来启动测试：
+  $$bash
+  python test.py --configs configs/sample.yaml
+  $$
+
+通过这种目录结构和命令，您可以快速启动模型的训练与测试。
+
 ## 快速开始
 
-### 1. 克隆项目代码
+### 1. 创建项目文件夹
 
-```bash
+进入您需要创建项目的路径并创建文件夹：
+
+$$bash
+mkdir project_name
+cd project_name
+$$
+
+### 2. 克隆 Dancher-Tools 代码
+
+在项目文件夹下，克隆 Dancher-Tools 代码：
+
+$$bash
 git clone https://github.com/DancherLab/dancher_tools.git
-```
+$$
 
-### 2. 安装依赖
+### 3. 安装依赖
 
 进入项目目录并安装所需的 Python 包：
 
-```bash
+$$bash
 cd dancher_tools
 pip install -r requirements.txt
-```
+$$
 
-### 3. 自定义配置文件、模型和数据集
+### 4. 自定义配置文件、模型和数据集
 
-根据您的需求，自定义配置文件、模型和数据集，详细说明如下。
+- **`configs/`**：存放您的配置文件。例如 `configs/sample.yaml`。
+- **`datapacks/`**：存放数据集设置代码，例如 `my_dataset.py`，用于定义数据的处理逻辑。
+- **`datasets/`**：存放实际的数据集内容，例如 `my_dataset/` 包含 `images` 和 `masks`。
+- **`models/`**：存放自定义的模型代码，例如 `MyModel.py`。
+
+以下是详细说明。
+
 
 ## 配置文件
 
