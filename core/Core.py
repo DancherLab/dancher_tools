@@ -120,16 +120,17 @@ class Core(nn.Module):
 
         # 加载模型
         if os.path.exists(load_path):
-            print(f"Loading model from {load_path}")
+            # print(f"Loading model from {load_path}")
             checkpoint = torch.load(load_path, weights_only=False)
 
             # 加载模型状态
             self.load_state_dict(checkpoint['model_state_dict'])
-            print(f"Model successfully loaded from {load_path}, epoch: {checkpoint.get('epoch', 'unknown')}.")
 
             # 恢复训练状态
             self.last_epoch = checkpoint.get('epoch', 0)
             self.best_val = checkpoint.get('best_val', 0)
+            
+            print(f"Model successfully loaded from {load_path}, epoch: {self.last_epoch}, best_val: {self.best_val}.")
         else:
             print(f"No model found at {load_path}, starting from scratch.")
             self.last_epoch = 0

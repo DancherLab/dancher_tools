@@ -67,11 +67,10 @@ class SegModel(Core):
             val_loss, val_metrics, _ = self.evaluate(val_loader)
             val_first_metric = val_metrics.get(first_metric)
 
-            if best_val is None or (val_first_metric is not None and val_first_metric > best_val):
-                best_val = val_first_metric
-                self.best_val = best_val
+            if val_first_metric is not None and (self.best_val is None or val_first_metric > self.best_val):
+                self.best_val = val_first_metric
                 self.save(model_dir=model_save_dir, mode='best')
-                print(f"New best model saved with {first_metric}: {best_val:.4f}")
+                print(f"New best model saved with {first_metric}: {self.best_val:.4f}")
 
             early_stopping(val_loss)
             if early_stopping.early_stop:
