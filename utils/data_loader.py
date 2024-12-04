@@ -1,18 +1,17 @@
 import os
 import torch
 from torch.utils.data import DataLoader, ConcatDataset
-from torchvision import transforms
-import importlib
 import numpy as np
 from tqdm import tqdm
 from concurrent.futures import ProcessPoolExecutor
-import hashlib  # 用于生成 MD5 校验
+import hashlib
 import cv2
 import h5py
 from threading import Thread
 from scipy.ndimage import zoom
+import importlib
 
-
+# 之前的 DatasetRegistry 保持不变
 class DatasetRegistry:
     """
     数据集注册表，用于管理和动态加载不同的数据集。
@@ -53,7 +52,6 @@ class DatasetRegistry:
         except ImportError:
             raise ValueError(f"Dataset type '{dataset_name}' is not recognized.")
 
-
 def calculate_md5(file_path):
     """
     计算文件的 MD5 值。
@@ -63,7 +61,6 @@ def calculate_md5(file_path):
         while chunk := f.read(8192):
             hasher.update(chunk)
     return hasher.hexdigest()
-
 
 def is_cache_valid(cache_path, module_path):
     """
@@ -114,7 +111,6 @@ def apply_color_map(mask, color_map):
         return mask
     else:
         raise ValueError(f"Invalid mask shape: {mask.shape}. Expected (H, W, 3) or (H, W).")
-
 
 def process_file(args):
     """
@@ -214,35 +210,38 @@ def get_dataloaders(args):
 
     train_datasets, test_datasets = [], []
 
-    for dataset_config in args.datasets:
-        dataset_name = dataset_config['name']
-        DatasetRegistry.load_dataset_module(dataset_name)
-        datapack = DatasetRegistry.get_dataset(dataset_name)
-        module_path = os.path.join('datapacks', f'{dataset_name}.py')
+    # 只加载配置中的单个数据集
+    dataset_config = args.ds
+    dataset_name = dataset_config['name']
+    DatasetRegistry.load_dataset_module(dataset_name)
+    datapack = DatasetRegistry.get_dataset(dataset_name)
+    module_path = os.path.join('datapacks', f'{dataset_name}.py')
 
-        for train_path in dataset_config.get('train_paths', []):
-            train_cache_path = os.path.join(train_path, "__cache__.h5")
-            if is_cache_valid(train_cache_path, module_path):
-                with h5py.File(train_cache_path, 'r') as f:
-                    images = f['images'][:]
-                    masks = f['masks'][:]
-                    train_data = {'images': images, 'masks': masks}
-            else:
-                train_data = create_cache(datapack, train_path, img_size, train_cache_path, module_path)
-            train_dataset = datapack(train_data)
-            train_datasets.append(train_dataset)
+    # 加载训练数据
+    for train_path in dataset_config.get('train_paths', []):
+        train_cache_path = os.path.join(train_path, "__cache__.h5")
+        if is_cache_valid(train_cache_path, module_path):
+            with h5py.File(train_cache_path, 'r') as f:
+                images = f['images'][:]
+                masks = f['masks'][:]
+                train_data = {'images': images, 'masks': masks}
+        else:
+            train_data = create_cache(datapack, train_path, img_size, train_cache_path, module_path)
+        train_dataset = datapack(train_data)
+        train_datasets.append(train_dataset)
 
-        for test_path in dataset_config.get('test_paths', []):
-            test_cache_path = os.path.join(test_path, "__cache__.h5")
-            if is_cache_valid(test_cache_path, module_path):
-                with h5py.File(test_cache_path, 'r') as f:
-                    images = f['images'][:]
-                    masks = f['masks'][:]
-                    test_data = {'images': images, 'masks': masks}
-            else:
-                test_data = create_cache(datapack, test_path, img_size, test_cache_path, module_path)
-            test_dataset = datapack(test_data)
-            test_datasets.append(test_dataset)
+    # 加载测试数据
+    for test_path in dataset_config.get('test_paths', []):
+        test_cache_path = os.path.join(test_path, "__cache__.h5")
+        if is_cache_valid(test_cache_path, module_path):
+            with h5py.File(test_cache_path, 'r') as f:
+                images = f['images'][:]
+                masks = f['masks'][:]
+                test_data = {'images': images, 'masks': masks}
+        else:
+            test_data = create_cache(datapack, test_path, img_size, test_cache_path, module_path)
+        test_dataset = datapack(test_data)
+        test_datasets.append(test_dataset)
 
     combined_train_dataset = ConcatDataset(train_datasets) if train_datasets else None
     combined_test_dataset = ConcatDataset(test_datasets) if test_datasets else None

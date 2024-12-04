@@ -5,24 +5,46 @@ import numpy as np
 EPSILON = 1e-6
 
 def mIoU(predicted, target, num_classes):
-    """
-    计算 mIoU (Mean Intersection over Union)。
-    :param predicted: 模型预测的张量，形状为 (batch_size, height, width)。
-    :param target: 真实标签张量，形状为 (batch_size, height, width)。
-    :param num_classes: 类别数
-    :return: 平均 IoU 值
-    """
     iou_scores = []
     for cls in range(num_classes):
-        pred_cls = (predicted == cls).float()
-        tgt_cls = (target == cls).float()
+        # 创建预测和目标类的二值图，分别表示该类别的像素
+        pred_cls = (predicted == cls).float()  # 预测类的二值图
+        tgt_cls = (target == cls).float()      # 目标类的二值图
         
+        # 计算交集：预测类与目标类的重叠部分
         intersection = torch.logical_and(pred_cls, tgt_cls).float().sum()
+        
+        # 计算并集：预测类与目标类的所有部分
         union = torch.logical_or(pred_cls, tgt_cls).float().sum() + EPSILON
         
+        # 计算IoU
         iou = intersection / union
         iou_scores.append(iou.item())
+    
+    # 计算并返回所有类别的平均IoU
     return np.mean(iou_scores)
+
+
+
+# def mIoU(predicted, target, num_classes):
+#     """
+#     计算 mIoU (Mean Intersection over Union)。
+#     :param predicted: 模型预测的张量，形状为 (batch_size, height, width)。
+#     :param target: 真实标签张量，形状为 (batch_size, height, width)。
+#     :param num_classes: 类别数
+#     :return: 平均 IoU 值
+#     """
+#     iou_scores = []
+#     for cls in range(num_classes):
+#         pred_cls = (predicted == cls).float()
+#         tgt_cls = (target == cls).float()
+        
+#         intersection = torch.logical_and(pred_cls, tgt_cls).float().sum()
+#         union = torch.logical_or(pred_cls, tgt_cls).float().sum() + EPSILON
+        
+#         iou = intersection / union
+#         iou_scores.append(iou.item())
+#     return np.mean(iou_scores)
 
 def precision(predicted, target, num_classes):
     """
