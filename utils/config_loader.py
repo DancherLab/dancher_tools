@@ -183,6 +183,7 @@ def get_config(config_file=None):
         parser.add_argument('--config', type=str, required=True, help='Path to the config file')
         args = parser.parse_args()
         config = load_yaml_config(args.config)
+        config_file = args.config
 
     # 确保 'task' 参数存在
     task_type = config.get('task')

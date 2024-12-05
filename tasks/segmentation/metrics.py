@@ -3,105 +3,69 @@ import numpy as np
 
 # 防止除零错误的微小值
 EPSILON = 1e-6
-
 def mIoU(predicted, target, num_classes):
     iou_scores = []
     for cls in range(num_classes):
-        # 创建预测和目标类的二值图，分别表示该类别的像素
-        pred_cls = (predicted == cls).float()  # 预测类的二值图
-        tgt_cls = (target == cls).float()      # 目标类的二值图
-        
-        # 计算交集：预测类与目标类的重叠部分
+        pred_cls = (predicted == cls).float()
+        tgt_cls = (target == cls).float()
+
         intersection = torch.logical_and(pred_cls, tgt_cls).float().sum()
-        
-        # 计算并集：预测类与目标类的所有部分
-        union = torch.logical_or(pred_cls, tgt_cls).float().sum() + EPSILON
-        
-        # 计算IoU
-        iou = intersection / union
-        iou_scores.append(iou.item())
-    
-    # 计算并返回所有类别的平均IoU
-    return np.mean(iou_scores)
+        union = torch.logical_or(pred_cls, tgt_cls).float().sum()
 
+        if union == 0:
+            iou = 1.0  # 类别在预测和目标中均未出现，设为完美分数
+            # print(f"Class {cls} not present in predictions and targets. Setting IoU to 1.0")
+        else:
+            iou = (intersection / (union + EPSILON)).item()
+            # print(f"Class {cls}: Intersection = {intersection.item()}, Union = {union.item()}, IoU = {iou}")
+        iou_scores.append(iou)
+    return iou_scores
 
-
-# def mIoU(predicted, target, num_classes):
-#     """
-#     计算 mIoU (Mean Intersection over Union)。
-#     :param predicted: 模型预测的张量，形状为 (batch_size, height, width)。
-#     :param target: 真实标签张量，形状为 (batch_size, height, width)。
-#     :param num_classes: 类别数
-#     :return: 平均 IoU 值
-#     """
-#     iou_scores = []
-#     for cls in range(num_classes):
-#         pred_cls = (predicted == cls).float()
-#         tgt_cls = (target == cls).float()
-        
-#         intersection = torch.logical_and(pred_cls, tgt_cls).float().sum()
-#         union = torch.logical_or(pred_cls, tgt_cls).float().sum() + EPSILON
-        
-#         iou = intersection / union
-#         iou_scores.append(iou.item())
-#     return np.mean(iou_scores)
 
 def precision(predicted, target, num_classes):
-    """
-    计算 Precision。
-    :param predicted: 模型预测的张量，形状为 (batch_size, height, width)。
-    :param target: 真实标签张量，形状为 (batch_size, height, width)。
-    :param num_classes: 类别数
-    :return: 平均 Precision 值
-    """
     precision_scores = []
     for cls in range(num_classes):
         pred_cls = (predicted == cls).float()
         tgt_cls = (target == cls).float()
         
         true_positive = torch.logical_and(pred_cls, tgt_cls).float().sum()
-        predicted_positive = pred_cls.float().sum() + EPSILON
+        predicted_positive = pred_cls.float().sum()
         
-        precision_score = true_positive / predicted_positive
-        precision_scores.append(precision_score.item())
-    return np.mean(precision_scores)
+        if predicted_positive == 0 and tgt_cls.float().sum() == 0:
+            precision_score = 1.0  # 完美表现
+        else:
+            precision_score = (true_positive / (predicted_positive + EPSILON)).item()
+        precision_scores.append(precision_score)
+    return precision_scores
 
 def recall(predicted, target, num_classes):
-    """
-    计算 Recall。
-    :param predicted: 模型预测的张量，形状为 (batch_size, height, width)。
-    :param target: 真实标签张量，形状为 (batch_size, height, width)。
-    :param num_classes: 类别数
-    :return: 平均 Recall 值
-    """
     recall_scores = []
     for cls in range(num_classes):
         pred_cls = (predicted == cls).float()
         tgt_cls = (target == cls).float()
         
         true_positive = torch.logical_and(pred_cls, tgt_cls).float().sum()
-        actual_positive = tgt_cls.float().sum() + EPSILON
+        actual_positive = tgt_cls.float().sum()
         
-        recall_score = true_positive / actual_positive
-        recall_scores.append(recall_score.item())
-    return np.mean(recall_scores)
+        if actual_positive == 0:
+            recall_score = 1.0  # 完美表现
+        else:
+            recall_score = (true_positive / (actual_positive + EPSILON)).item()
+        recall_scores.append(recall_score)
+    return recall_scores
 
 def f1_score(predicted, target, num_classes):
-    """
-    计算 F1 Score。
-    :param predicted: 模型预测的张量，形状为 (batch_size, height, width)。
-    :param target: 真实标签张量，形状为 (batch_size, height, width)。
-    :param num_classes: 类别数
-    :return: 平均 F1 Score 值
-    """
-    precision_value = precision(predicted, target, num_classes)
-    recall_value = recall(predicted, target, num_classes)
+    precision_scores = precision(predicted, target, num_classes)
+    recall_scores = recall(predicted, target, num_classes)
     
-    if precision_value + recall_value == 0:
-        return 0.0
-    
-    f1 = 2 * (precision_value * recall_value) / (precision_value + recall_value + EPSILON)
-    return f1
+    f1_scores = []
+    for p, r in zip(precision_scores, recall_scores):
+        if p + r == 0:
+            f1 = 0.0
+        else:
+            f1 = 2 * (p * r) / (p + r + EPSILON)
+        f1_scores.append(f1)
+    return f1_scores
 
 # 用于 segmentation 任务的预设指标字典
 PRESET_METRICS = {
